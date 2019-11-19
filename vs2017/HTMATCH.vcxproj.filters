@@ -1,0 +1,57 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{9cdb3fb5-56b6-478a-95fa-1ffa2236d41a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{e2c2d670-64f3-4238-bffc-d5ba7eaf2517}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\examples">
+      <UniqueIdentifier>{bfa11634-64e2-424f-90c3-f05eb8529183}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\vanillaHTM">
+      <UniqueIdentifier>{8aedf4d1-1275-4225-9888-cb8168cddfff}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\tools">
+      <UniqueIdentifier>{44f69f41-7caa-431c-bb7d-36640d967120}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\examples\PerfTest.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\examples\WinConsole.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\examples\SampleTools.h">
+      <Filter>Header Files\examples</Filter>
+    </ClInclude>
+    <ClInclude Include="..\examples\WinGDITools.h">
+      <Filter>Header Files\examples</Filter>
+    </ClInclude>
+    <ClInclude Include="..\tools\rand.h">
+      <Filter>Header Files\tools</Filter>
+    </ClInclude>
+    <ClInclude Include="..\tools\sdr.h">
+      <Filter>Header Files\tools</Filter>
+    </ClInclude>
+    <ClInclude Include="..\tools\system.h">
+      <Filter>Header Files\tools</Filter>
+    </ClInclude>
+    <ClInclude Include="..\vanillaHTM\VanillaHTMConfig.h">
+      <Filter>Header Files\vanillaHTM</Filter>
+    </ClInclude>
+    <ClInclude Include="..\vanillaHTM\VanillaSP.h">
+      <Filter>Header Files\vanillaHTM</Filter>
+    </ClInclude>
+    <ClInclude Include="..\vanillaHTM\VanillaSPGen.h">
+      <Filter>Header Files\vanillaHTM</Filter>
+    </ClInclude>
+    <ClInclude Include="..\vanillaHTM\VanillaSPImpl.h">
+      <Filter>Header Files\vanillaHTM</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
