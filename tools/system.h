@@ -168,7 +168,8 @@ namespace HTMATCH {
         return countSetBits64_software(uValue);
 #  endif
 #else
-        return countSetBits64_software(uValue);
+        uint32 uSum = countSetBits32(uint32(uValue))) + countSetBits32(uint32(uValue>>32u));
+        return uint64(uSum);
 #endif
     }
 
@@ -208,7 +209,11 @@ namespace HTMATCH {
         return getMostSignificantBitPos64_software(uValue);
 #  endif
 #else
-        return getMostSignificantBitPos64_software(uValue);
+        uint32 uHi = uint32(uValue>>32u);
+        if (uHi)
+            return 32u + getMostSignificantBitPos32(uHi);
+        else
+            return getMostSignificantBitPos32(uint32(uValue));
 #endif
     }
 
