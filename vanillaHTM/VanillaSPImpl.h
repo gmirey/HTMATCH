@@ -32,7 +32,7 @@
 #ifndef _VANILLA_SP_GEN_H
 #  include "VanillaHTMConfig.h"
 #  ifndef VANILLA_SP_CONFIG
-#    define VANILLA_SP_CONFIG            VANILLA_SP_CONFIG_CONST_LOCAL
+#    define VANILLA_SP_CONFIG            VANILLA_SP_CONFIG_CONST_LOCAL_GAUSS_ONLY
 #  endif
 #  ifndef VANILLA_SP_SYNAPSE_KIND
 #    define VANILLA_SP_SYNAPSE_KIND      VANILLA_SP_SYNAPSE_KIND_CONST_USE_FIXED16
@@ -234,7 +234,9 @@ static float _getSumFromRange(u16fast uStartX, u16fast uSizeX, u16fast uStartY, 
                 fResult += pColumnMajorFloatValues[(iX << VANILLA_HTM_SHEET_SHIFT_DIVY) + iY];
             }
         } else {
-            const float* pStartFloatValue = pColumnMajorFloatValues + ((u16fast(iX) << VANILLA_HTM_SHEET_SHIFT_DIVY) + uStartY);
+            u16fast uIndex = u16fast(iX) << VANILLA_HTM_SHEET_SHIFT_DIVY;
+            uIndex += uStartY;
+            const float* pStartFloatValue = pColumnMajorFloatValues + uIndex;
             for (const float *pCurrent = pStartFloatValue, *pEnd = pStartFloatValue + uSizeY; pCurrent < pEnd; pCurrent++) {
                 fResult += *pCurrent;
             }
@@ -266,7 +268,9 @@ static float _getMaxFromRange(u16fast uStartX, u16fast uSizeX, u16fast uStartY, 
                     fMaxFound = fThere;
             }
         } else {
-            const float* pStartFloatValue = pColumnMajorFloatValues + ((u16fast(iX) << VANILLA_HTM_SHEET_SHIFT_DIVY) + uStartY);
+            u16fast uIndex = u16fast(iX) << VANILLA_HTM_SHEET_SHIFT_DIVY;
+            uIndex += uStartY;
+            const float* pStartFloatValue = pColumnMajorFloatValues + uIndex;
             for (const float *pCurrent = pStartFloatValue, *pEnd = pStartFloatValue + uSizeY; pCurrent < pEnd; pCurrent++) {
                 float fThere = *pCurrent;
                 if (fThere > fMaxFound)
@@ -305,7 +309,7 @@ static void _computeRowMajorGFromColMajorValues(const ValType* pColumnValues, Ou
     // iterate all kernels ending before reaching sheet height
     for (u8fast uK = 1u; uK < uKernelCountY; uK++) {
         // start new integration for this kernel
-        integratedVal = startVal;
+        initializer(integratedVal);
         // then integrate values and emit output
         for (uRelY = 0u; uRelY < uKernelSize; uRelY++, pInput++, outG += VANILLA_HTM_SHEET_WIDTH) {
             integrator(integratedVal, *pInput);
@@ -792,6 +796,157 @@ static void _initConnectivityField(const VanillaSP::Segment& segment, uint64* pC
     }
 }
 
+// central factor for '_computeGaussian' implementation
+static const uint32 k_uFactorForCenter = 327u;
+
+// 15 factors along one orientation for '_getGaussianSum' implementation
+static const uint32 k_gaussianFactors[15u] = {
+    320u, 302u, 273u, 237u, 199u,
+    159u, 123u,  91u,  65u,  45u,
+    29u,  19u,  11u,   7u,   4u,
+};
+
+// - - - - - - - - - - - - - - - - - - - -
+// returns the sum of 15 samples along one axis and one direction, weighted by factors following a gaussian curve
+// - - - - - - - - - - - - - - - - - - - -
+template<typename ActivationLevelType, bool bIsY, bool bBackwards, bool bCareForWrap>
+static uint32 _getGaussianSum(const ActivationLevelType* pActivationLevelsPerCol, u16fast uX, u16fast uY)
+{
+    uint32 uSum = 0u;
+    for (u16fast uOffset = 1u; uOffset <= 15u; uOffset++) {
+        u16fast uSampleX = i16fast(uX);
+        u16fast uSampleY = i16fast(uY);
+        if (bIsY) {
+            if (bCareForWrap) {
+                uSampleY += bBackwards ? (VANILLA_HTM_SHEET_HEIGHT-uOffset) : uOffset;
+                uSampleY &= VANILLA_HTM_SHEET_YMASK;
+            } else {
+                if (bBackwards)
+                    uSampleY -= uOffset;
+                else
+                    uSampleY += uOffset;
+            }
+        } else {
+            if (bCareForWrap) {
+                uSampleX += bBackwards ? (VANILLA_HTM_SHEET_WIDTH-uOffset) : uOffset;
+                uSampleX &= VANILLA_HTM_SHEET_XMASK;
+            } else {
+                if (bBackwards)
+                    uSampleX -= uOffset;
+                else
+                    uSampleX += uOffset;
+            }
+        }
+        u16fast uSampleIndex = (uSampleX * VANILLA_HTM_SHEET_HEIGHT) + uSampleY;
+        uSum += uint32(pActivationLevelsPerCol[uSampleIndex]) * k_gaussianFactors[uOffset-1u];
+    }
+    return uSum;
+}
+; // template termination
+
+// - - - - - - - - - - - - - - - - - - - -
+// computes a gaussian filter over a 31x31 kernel, using the well known two-passes optimization (one for each dimension)
+// - - - - - - - - - - - - - - - - - - - -
+template<typename ActivationLevelType, bool bOutputMinActivation>
+static void _computeGaussian(const ActivationLevelType* pActivationLevelsPerCol, uint32* pOutY, uint32* pOutFinal,
+    uint32* pOutputMinActivation)
+{
+    const ActivationLevelType* pCurrentActivation = pActivationLevelsPerCol;
+    uint32* pCurrentOut = pOutY;
+    // sum of gaussian factors is 4095 => shift by 12 nominally, or shift by 4 for first round of y
+    //   for when ActivationLevelType is 16b (=> "raw") so as to simulate boosted-by-1.0 (towards fixed pt 8b after point)
+    static const u16fast uShiftFirst = (sizeof(ActivationLevelType) == 2u) ? 4u : 12u;
+    for (u16fast uX = 0u; uX < VANILLA_HTM_SHEET_WIDTH; uX++) {
+        u16fast uY = 0u;
+        for (; uY < VANILLA_HTM_SHEET_HALFHEIGHT; uY++, pCurrentActivation++, pCurrentOut++) {
+            uint32 uCurrentSum = uint32(*pCurrentActivation) * k_uFactorForCenter;
+            uCurrentSum += _getGaussianSum<ActivationLevelType, true, true, true>(pActivationLevelsPerCol, uX, uY);
+            uCurrentSum += _getGaussianSum<ActivationLevelType, true, false, false>(pActivationLevelsPerCol, uX, uY);
+            uint32 uValue = uCurrentSum >> uShiftFirst;
+            *pCurrentOut = uValue;
+        }
+        for (; uY < VANILLA_HTM_SHEET_HEIGHT; uY++, pCurrentActivation++, pCurrentOut++) {
+            uint32 uCurrentSum = uint32(*pCurrentActivation) * k_uFactorForCenter;
+            uCurrentSum += _getGaussianSum<ActivationLevelType, true, true, false>(pActivationLevelsPerCol, uX, uY);
+            uCurrentSum += _getGaussianSum<ActivationLevelType, true, false, true>(pActivationLevelsPerCol, uX, uY);
+            uint32 uValue = uCurrentSum >> uShiftFirst;
+            *pCurrentOut = uValue;
+        }
+    }
+    const uint32* pCurrentY = pOutY;
+    uint32* pCurrentMin = pOutputMinActivation;
+    pCurrentOut = pOutFinal;
+    u16fast uX = 0u;
+    for (; uX < VANILLA_HTM_SHEET_HALFWIDTH; uX++) {
+        for (u16fast uY = 0u; uY < VANILLA_HTM_SHEET_HEIGHT; uY++, pCurrentY++, pCurrentOut++) {
+            uint32 uCurrentSum = (*pCurrentY) * k_uFactorForCenter;
+            uCurrentSum += _getGaussianSum<uint32, false, true, true>(pOutY, uX, uY);
+            uCurrentSum += _getGaussianSum<uint32, false, false, false>(pOutY, uX, uY);
+            uint32 uValue = uCurrentSum >> 12u;
+            *pCurrentOut = uValue;
+            if (bOutputMinActivation) {
+                *pCurrentMin += uValue;
+                pCurrentMin++;
+            }
+        }
+    }
+    for (; uX < VANILLA_HTM_SHEET_WIDTH; uX++) {
+        for (u16fast uY = 0u; uY < VANILLA_HTM_SHEET_HEIGHT; uY++, pCurrentY++, pCurrentOut++) {
+            uint32 uCurrentSum = (*pCurrentY) * k_uFactorForCenter;
+            uCurrentSum += _getGaussianSum<uint32, false, true, false>(pOutY, uX, uY);
+            uCurrentSum += _getGaussianSum<uint32, false, false, true>(pOutY, uX, uY);
+            uint32 uValue = uCurrentSum >> 12u;
+            *pCurrentOut = uValue;
+            if (bOutputMinActivation) {
+                *pCurrentMin += uValue;
+                pCurrentMin++;
+            }
+        }
+    }
+}
+; // template termination
+
+// - - - - - - - - - - - - - - - - - - - -
+// reduces a table of activation levels, given a table of reduction values. clamp results to zero before assigning to 'pResult'
+// NB : pResult MAY alias pActivationLevelsPerCol
+// returns number of remaining non-zeros (computed with unbranching methods)
+// - - - - - - - - - - - - - - - - - - - -
+template<typename ActivationLevelType>
+static u16fast _reduceByAmount(const ActivationLevelType* pActivationLevelsPerCol, const uint32* pReduction, uint32* pResult) {
+    u16fast uNonZeroCount = 0u;
+    const ActivationLevelType* pCurrentActivation = pActivationLevelsPerCol;
+    const uint32* pCurrentReduction = pReduction;
+    uint32* pCurrentResult = pResult ;
+    for (u16fast uIndex = 0u; uIndex < VANILLA_HTM_SHEET_2DSIZE;
+            uIndex++, pCurrentActivation++, pCurrentReduction++, pCurrentResult++) {
+        int32 iReduced = (sizeof(ActivationLevelType) == 2u) ? 
+            ((int32(*pCurrentActivation) << 8) - int32(*pCurrentReduction)) :   // if raw, shift to 8b after point
+            (int32(*pCurrentActivation) - int32(*pCurrentReduction));           // otherwise already both 8b after point
+        int32 iMaskIfNonNeg = ~(iReduced >> 31);
+        *pCurrentResult = iMaskIfNonNeg & iReduced;
+        uNonZeroCount += u16fast(iMaskIfNonNeg & 1u);
+    }
+    return uNonZeroCount;
+}
+; // template termination
+
+static u16fast _reduceByAmountScaled(const uint32* pStartLevelsPerCol, const uint32* pReduction,
+    uint32 uScale8bAfterPoint, uint32* pResult)
+{
+    u16fast uNonZeroCount = 0u;
+    const uint32* pCurrentActivation = pStartLevelsPerCol;
+    const uint32* pCurrentReduction = pReduction;
+    uint32* pCurrentResult = pResult ;
+    for (u16fast uIndex = 0u; uIndex < VANILLA_HTM_SHEET_2DSIZE;
+        uIndex++, pCurrentActivation++, pCurrentReduction++, pCurrentResult++) {
+        int32 iReduced = int32(*pCurrentActivation) - ((int32(uScale8bAfterPoint) * int32(*pCurrentReduction)) >> 8);
+        int32 iMaskIfNonNeg = ~(iReduced >> 31);
+        *pCurrentResult = iMaskIfNonNeg & iReduced;
+        uNonZeroCount += u16fast(iMaskIfNonNeg & 1u);
+    }
+    return uNonZeroCount;
+}
+
 // - - - - - - - - - - - - - - - - - - - -
 // VanillaSP ctor
 // - - - - - - - - - - - - - - - - - - - -
@@ -902,8 +1057,14 @@ VanillaSP::VanillaSP(uint8 uNumberOfInputSheets, uint8 uPotentialConnectivityRad
     _pTmpTableBest = new uint32[uMaxK_now + 1u];
 #ifdef VANILLA_SP_USE_LOCAL_INHIB
     _onUpdateDynamicInhibitionRange();
-#endif
-
+#  if (VANILLA_SP_USE_LOCAL_INHIB == VANILLA_SP_LOCAL_INHIB_TYPE_NOMINAL)
+#    if (VANILLA_SP_NEIGHBORHOOD_OPTIM == VANILLA_SP_NEIGHBORHOOD_OPTIM_CONST_GAUSSFILTER)
+        _pTmpGaussY = new uint32[VANILLA_HTM_SHEET_2DSIZE];
+        _pTmpGaussX = new uint32[VANILLA_HTM_SHEET_2DSIZE];
+        _pReducedActivations = new uint32[VANILLA_HTM_SHEET_2DSIZE];
+#    endif // VANILLA_SP_NEIGHBORHOOD_OPTIM_CONST_GAUSSTEST or VANILLA_SP_NEIGHBORHOOD_OPTIM_CONST_ENFSPACING
+#  endif // valueof VANILLA_SP_USE_LOCAL_INHIB
+#endif // VANILLA_SP_USE_LOCAL_INHIB
 }
 
 // - - - - - - - - - - - - - - - - - - - -
@@ -931,6 +1092,16 @@ VanillaSP::~VanillaSP()
 #ifdef VANILLA_SP_USE_CONNECTIVITY_FIELD_OPTI
     delete[] _pConnectivityFields;
 #endif
+
+#ifdef VANILLA_SP_USE_LOCAL_INHIB
+#if (VANILLA_SP_USE_LOCAL_INHIB == VANILLA_SP_LOCAL_INHIB_TYPE_NOMINAL)
+#    if (VANILLA_SP_NEIGHBORHOOD_OPTIM == VANILLA_SP_NEIGHBORHOOD_OPTIM_CONST_GAUSSFILTER)
+        delete[] _pTmpGaussY;
+        delete[] _pTmpGaussX;
+        delete[] _pReducedActivations;
+#    endif // VANILLA_SP_NEIGHBORHOOD_OPTIM_CONST_GAUSSTEST or VANILLA_SP_NEIGHBORHOOD_OPTIM_CONST_ENFSPACING
+#  endif // valueof VANILLA_SP_USE_LOCAL_INHIB
+#endif // VANILLA_SP_USE_LOCAL_INHIB
 }
 
 // - - - - - - - - - - - - - - - - - - - -
@@ -950,7 +1121,7 @@ void VanillaSP::_compute(const uint64* pInputBinaryBitmap, std::vector<uint16>& 
     if (bLearning) {
         _uEpochLearning++;
         if (0uLL == (_uEpochLearning & 0x003FuLL)) { // complex updates are called once every 64 rounds
-#  if defined(VANILLA_SP_USE_LOCAL_INHIB)
+#  if defined(VANILLA_SP_USE_LOCAL_INHIB) && !defined(VANILLA_SP_FORCE_NONLOCAL_STATS)
             _onUpdateDynamicInhibitionRange();
 #    if (VANILLA_SP_USE_LOCAL_INHIB == VANILLA_SP_LOCAL_INHIB_TYPE_NOMINAL)
             if (_uInhibitionSideSize < VANILLA_SP_MIN_AREA_SIDE_SIZE || _uInhibitionSideSize >= VANILLA_HTM_SHEET_WIDTH) {
@@ -963,7 +1134,7 @@ void VanillaSP::_compute(const uint64* pInputBinaryBitmap, std::vector<uint16>& 
 #    else // hopefully VANILLA_SP_USE_LOCAL_INHIB == VANILLA_SP_LOCAL_INHIB_TYPE_BUCKET
             _onUpdateOverThresholdRatioTargetWithBucketInhib();
 #    endif // value of VANILLA_SP_USE_LOCAL_INHIB 
-#  else  // !VANILLA_SP_USE_LOCAL_INHIB
+#  else  // !VANILLA_SP_USE_LOCAL_INHIB || VANILLA_SP_FORCE_NONLOCAL_STATS
             _onUpdateOverThresholdRatioTargetWithGlobalInhib();
 #  endif // VANILLA_SP_USE_LOCAL_INHIB
         }
@@ -1057,7 +1228,7 @@ void VanillaSP::_computeActiveColumnsAndLearnWhenBoosted(const uint64* pInputBin
             _updateSynapsesOnActiveColumnsTowardsCurrentInput(pInputBinaryBitmap, vecOutputIndices);
             _onEvaluateColumnUsage(_pTmpRawActivationLevelsPerCol, pOutputBinaryBitmap);
             _onIncreasePermanencesForUnderUsedColums();
-#  if defined(VANILLA_SP_USE_LOCAL_INHIB)
+#  if defined(VANILLA_SP_USE_LOCAL_INHIB) && !defined(VANILLA_SP_FORCE_NONLOCAL_STATS)
 #    if (VANILLA_SP_USE_LOCAL_INHIB == VANILLA_SP_LOCAL_INHIB_TYPE_NOMINAL)
             if (_uInhibitionSideSize < VANILLA_SP_MIN_AREA_SIDE_SIZE || _uInhibitionSideSize >= VANILLA_HTM_SHEET_WIDTH) {
                 _onEvaluateBoostingFromColumnUsageWithGlobalInhib();
@@ -1069,7 +1240,7 @@ void VanillaSP::_computeActiveColumnsAndLearnWhenBoosted(const uint64* pInputBin
 #    else // hopefully VANILLA_SP_USE_LOCAL_INHIB == VANILLA_SP_LOCAL_INHIB_TYPE_BUCKET
             _onEvaluateBoostingFromColumnUsageWithBucketInhib();
 #    endif // value of VANILLA_SP_USE_LOCAL_INHIB 
-#  else  // !VANILLA_SP_USE_LOCAL_INHIB
+#  else  // !VANILLA_SP_USE_LOCAL_INHIB || VANILLA_SP_FORCE_NONLOCAL_STATS
             _onEvaluateBoostingFromColumnUsageWithGlobalInhib();
 #  endif // VANILLA_SP_USE_LOCAL_INHIB
         }
@@ -1170,11 +1341,73 @@ void VanillaSP::_onUpdateDynamicInhibitionRange() {
 
 #  if (VANILLA_SP_USE_LOCAL_INHIB == VANILLA_SP_LOCAL_INHIB_TYPE_NOMINAL)
 
+#    if (VANILLA_SP_NEIGHBORHOOD_OPTIM == VANILLA_SP_NEIGHBORHOOD_OPTIM_CONST_GAUSSFILTER)
+
+template<typename ActivationLevelType, bool bOutputMinActivation>
+void VanillaSP::_reduceActivationsByGaussianFilter(const ActivationLevelType* pActivationLevelsPerCol,
+    uint32* pOutputMinActivation)
+{
+    if (bOutputMinActivation) {
+        std::memset((void*)pOutputMinActivation, 0, sizeof(uint32_t)*VANILLA_HTM_SHEET_2DSIZE);
+    }
+    _computeGaussian<ActivationLevelType, bOutputMinActivation>(pActivationLevelsPerCol, _pTmpGaussY, _pTmpGaussX,
+        pOutputMinActivation);
+    u16fast uCurrentCount = _reduceByAmount<ActivationLevelType>(pActivationLevelsPerCol, _pTmpGaussX, _pReducedActivations);
+    if (uCurrentCount >= 42) {
+        // usually we won't have reached target sparsity 2% (41 active) in only one reduction-by-gaussian filter,
+        //   so we still have VANILLA_SP_MAX_GAUSSIAN_ITER-1 to get closer to it
+        for (u16fast uIterateMore = 1u; uIterateMore < VANILLA_SP_MAX_GAUSSIAN_ITER; uIterateMore++) {
+            _computeGaussian<uint32, bOutputMinActivation>(_pReducedActivations, _pTmpGaussY, _pTmpGaussX,
+                pOutputMinActivation);
+            uCurrentCount = _reduceByAmount<uint32>(_pReducedActivations, _pTmpGaussX, _pReducedActivations);
+            if (uCurrentCount < 42u) {
+                break;
+            }
+        }
+    }
+#ifdef VANILLA_SP_GAUSSIAN_SCALE_TARGET
+    if (uCurrentCount >= VANILLA_SP_GAUSSIAN_SCALE_TARGET) {
+        // usually iterative reduction at weight 1 by gaussian filter won't be enough still,
+        //   so we now try to reduce by reusing last gaussian filter at increased reduction weight
+        // Note that we may not try for the '41' value, though... since we'd prefer to use a more suitable method to do
+        //   the last few trimming steps (here we depend on VANILLA_SP_GAUSSIAN_SCALE_TARGET)
+        uint32 tTmpReduced[VANILLA_HTM_SHEET_2DSIZE];
+        std::memcpy((void*)tTmpReduced, _pReducedActivations, sizeof(uint32_t)*VANILLA_HTM_SHEET_2DSIZE);
+        uint32 uScale8bAfterPoint = 256u;
+        uint32 uScaleIncrease = 32u;
+        do {
+            uScale8bAfterPoint += uScaleIncrease;
+            u16fast uCountNow = _reduceByAmountScaled(tTmpReduced, _pTmpGaussX, uScale8bAfterPoint, _pReducedActivations);
+            if (uCountNow < 38u) {
+                if (uScaleIncrease > 1u) {
+                    uScale8bAfterPoint -= uScaleIncrease;
+                    uScaleIncrease >>= 2u;
+                } else {
+                    uCurrentCount = uCountNow;
+                }
+            } else {
+                uCurrentCount = uCountNow;
+            }
+        } while (uCurrentCount >= VANILLA_SP_GAUSSIAN_SCALE_TARGET);
+        if (bOutputMinActivation) {
+            const uint32* pCurrentReduction = _pTmpGaussX;
+            uint32* pCurrentMin = pOutputMinActivation;
+            for (u16fast uIndex = 0u; uIndex < VANILLA_HTM_SHEET_2DSIZE; uIndex++, pCurrentReduction++, pCurrentMin++) {
+                *pCurrentMin += ((*pCurrentReduction) * uScale8bAfterPoint) >> 8u;
+            }
+        }
+    }
+#endif // VANILLA_SP_GAUSSIAN_SCALE_TARGET
+}
+; // template termination
+
+#    endif // // VANILLA_SP_NEIGHBORHOOD_OPTIM_CONST_GAUSSFILTER
+
 // - - - - - - - - - - - - - - - - - - - -
 // - - - - - - - - - - - - - - - - - - - -
 template<typename ActivationLevelType, bool bOutputMinActivation>
 void VanillaSP::_getActiveColumnsFromActivationLevelsWithLocalInhibAlongX(const ActivationLevelType* pActivationLevelsPerCol,
-    std::vector<uint16>& vecOutputIndices, uint32* pOutputMinActivations) const
+    std::vector<uint16>& vecOutputIndices, uint32* pOutputMinActivations)
 {
     // Stored column-major => use it to our advantage by only computing neighborhood best at columns
     u16fast uIndex = 0u;
@@ -1210,9 +1443,10 @@ void VanillaSP::_getActiveColumnsFromActivationLevelsWithLocalInhibAlongX(const 
 // - - - - - - - - - - - - - - - - - - - -
 template<typename ActivationLevelType, bool bOutputMinActivation>
 void VanillaSP::_getActiveColumnsFromActivationLevelsWithFullLocalInhib(const ActivationLevelType* pActivationLevelsPerCol,
-    std::vector<uint16>& vecOutputIndices, uint32* pOutputMinActivations) const
+    std::vector<uint16>& vecOutputIndices, uint32* pOutputMinActivations)
 {
     // Full neighborhood computation at each point
+#if (VANILLA_SP_NEIGHBORHOOD_OPTIM == 0)
     u16fast uIndex = 0u;
     u16fast uStartOffset = size_t(_uInhibitionRadius);
     u16fast uSize = 1u + uStartOffset*2u;
@@ -1237,6 +1471,25 @@ void VanillaSP::_getActiveColumnsFromActivationLevelsWithFullLocalInhib(const Ac
             }
         }
     }
+#elif (VANILLA_SP_NEIGHBORHOOD_OPTIM == VANILLA_SP_NEIGHBORHOOD_OPTIM_CONST_ALGORITHM)
+    // TODO
+#   error ("_getActiveColumnsFromActivationLevelsWithFullLocalInhib not yet implemented for AlgorithmOpti")
+#elif (VANILLA_SP_NEIGHBORHOOD_OPTIM == VANILLA_SP_NEIGHBORHOOD_OPTIM_CONST_GAUSSFILTER)
+    _reduceActivationsByGaussianFilter<ActivationLevelType, bOutputMinActivation>(pActivationLevelsPerCol, pOutputMinActivations);
+#  if defined(VANILLA_SP_ADD_INVSQDIST_REPULSE)
+    // TODO
+#    error ("_getActiveColumnsFromActivationLevelsWithFullLocalInhib not yet implemented for VANILLA_SP_ADD_INVSQDIST_REPULSE")
+#  elif defined(VANILLA_SP_ADD_ONE_7x7)
+    // TODO
+#    error ("_getActiveColumnsFromActivationLevelsWithFullLocalInhib not yet implemented for VANILLA_SP_ADD_KONE_7x7")
+#  else
+    const uint32* pCurrentReduced = _pReducedActivations;
+    for (uint16 uIndex = 0u; uIndex < VANILLA_HTM_SHEET_2DSIZE; uIndex++, pCurrentReduced++) {
+        if (*pCurrentReduced)
+            vecOutputIndices.push_back(uIndex);
+    }
+#  endif
+#endif
 }
 ; // template termination
 
@@ -1326,7 +1579,7 @@ void VanillaSP::_onUpdateOverThresholdRatioTargetWithFullLocalInhib() {
 // - - - - - - - - - - - - - - - - - - - -
 template<typename ActivationLevelType, bool bOutputMinActivation>
 void VanillaSP::_getActiveColumnsFromActivationLevelsWithBucketInhib(const ActivationLevelType* pActivationLevelsPerCol,
-    std::vector<uint16>& vecOutputIndices, uint32* pOutputMinActivations) const
+    std::vector<uint16>& vecOutputIndices, uint32* pOutputMinActivations)
 {
     // TODO : if pOutputMinActivations
 
@@ -1430,7 +1683,7 @@ void VanillaSP::_onUpdateOverThresholdRatioTargetWithBucketInhib() {
 // - - - - - - - - - - - - - - - - - - - -
 template<typename ActivationLevelType, bool bOutputMinActivation>
 void VanillaSP::_getActiveColumnsFromActivationLevelsWithGlobalInhib(const ActivationLevelType* pActivationLevelsPerCol,
-    std::vector<uint16>& vecOutputIndices, uint32* pOutputMinActivations) const
+    std::vector<uint16>& vecOutputIndices, uint32* pOutputMinActivations)
 {
     u16fast uCountBest = _getBestFromRange<ActivationLevelType, false, false>(
         0u, VANILLA_HTM_SHEET_WIDTH, 0u, VANILLA_HTM_SHEET_HEIGHT,
@@ -1478,7 +1731,7 @@ void VanillaSP::_onUpdateOverThresholdRatioTargetWithGlobalInhib()
 // - - - - - - - - - - - - - - - - - - - -
 template<typename ActivationLevelType>
 void VanillaSP::_getActiveColumnsFromActivationLevels(const ActivationLevelType* pActivationLevelsPerCol,
-    std::vector<uint16>& vecOutputIndices, uint32* pOutputMinActivations) const
+    std::vector<uint16>& vecOutputIndices, uint32* pOutputMinActivations)
 {
 #if defined(VANILLA_SP_USE_LOCAL_INHIB)
 #  if (VANILLA_SP_USE_LOCAL_INHIB == VANILLA_SP_LOCAL_INHIB_TYPE_NOMINAL)
@@ -1643,8 +1896,8 @@ void VanillaSP::_onEvaluateColumnUsage(const uint16* pRawActivationLevelsPerCol,
         _uColumnUsageIntegrationWindow);
 }
 
-
 #if defined(VANILLA_SP_SUBNAMESPACE)
     } // namespace VANILLA_SP_SUBNAMESPACE
 #endif
 } // namespace HTMATCH
+

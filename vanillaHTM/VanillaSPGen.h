@@ -38,9 +38,25 @@
 #ifdef VANILLA_SP_UPDATERAD_KIND
 #  undef VANILLA_SP_UPDATERAD_KIND
 #endif
-#ifdef VANILLA_SP_UPDATERAD_OPTIM
-#  undef VANILLA_SP_UPDATERAD_OPTIM
+#ifdef VANILLA_SP_NEIGHBORHOOD_OPTIM
+#  undef VANILLA_SP_NEIGHBORHOOD_OPTIM
 #endif
+#ifdef VANILLA_SP_FORCE_NONLOCAL_STATS
+#  undef VANILLA_SP_FORCE_NONLOCAL_STATS
+#endif
+#ifdef VANILLA_SP_MAX_GAUSSIAN_ITER
+#  undef VANILLA_SP_GAUSSIAN_ITER
+#endif
+#ifdef VANILLA_SP_GAUSSIAN_SCALE_TARGET
+#  undef VANILLA_SP_GAUSSIAN_SCALE_TARGET
+#endif
+#ifdef VANILLA_SP_ADD_ONE_7x7
+#  undef VANILLA_SP_ADD_ONE_7x7
+#endif
+#ifdef VANILLA_SP_ADD_INVSQDIST_REPULSE
+#  undef VANILLA_SP_ADD_INVSQDIST_REPULSE
+#endif
+
 #ifdef VANILLA_SP_SYN_PERM_TYPE
 #  undef VANILLA_SP_SYN_PERM_TYPE
 #endif
@@ -100,23 +116,38 @@
 #           define VANILLA_SP_USE_LOCAL_INHIB        VANILLA_SP_LOCAL_INHIB_TYPE_BUCKET
 #  else
 //   always use nominal local inhib in the following
-#    define  VANILLA_SP_USE_LOCAL_INHIB                VANILLA_SP_LOCAL_INHIB_TYPE_NOMINAL
+#    define  VANILLA_SP_USE_LOCAL_INHIB              VANILLA_SP_LOCAL_INHIB_TYPE_NOMINAL
 #    if   (VANILLA_SP_CONFIG == VANILLA_SP_CONFIG_CONST_LOCAL)
-//          NOOP
+#            define VANILLA_SP_NEIGHBORHOOD_OPTIM    0
 #    elif (VANILLA_SP_CONFIG == VANILLA_SP_CONFIG_CONST_LOCAL_CORRECTEDUPDATERAD)
 #            define VANILLA_SP_UPDATERAD_KIND        VANILLA_SP_UPDATERAD_KIND_CONST_CORRECTED
+#            define VANILLA_SP_NEIGHBORHOOD_OPTIM    0
 #    elif (VANILLA_SP_CONFIG == VANILLA_SP_CONFIG_CONST_LOCAL_NOUPDATERAD)
 #            define VANILLA_SP_UPDATERAD_KIND        VANILLA_SP_UPDATERAD_KIND_CONST_NOUPDATE
-#    elif (VANILLA_SP_CONFIG == VANILLA_SP_CONFIG_CONST_LOCAL_NOUPDATERAD_ALL_OPTIM)
-#            error "VANILLA_SP_CONFIG_CONST_LOCAL_NOUPDATERAD_ALL_OPTIM not fully implemented yet" // TODO
+#            define VANILLA_SP_NEIGHBORHOOD_OPTIM    0
+#    elif (VANILLA_SP_CONFIG == VANILLA_SP_CONFIG_CONST_LOCAL_ALL_OPTIM)
 #            define VANILLA_SP_UPDATERAD_KIND        VANILLA_SP_UPDATERAD_KIND_CONST_NOUPDATE
 #            define VANILLA_SP_NEIGHBORHOOD_OPTIM    VANILLA_SP_NEIGHBORHOOD_OPTIM_CONST_ALGORITHM
-#    elif (VANILLA_SP_CONFIG == VANILLA_SP_CONFIG_CONST_LOCAL_NOUPDATERAD_GAUSSTEST)
-#            error "VANILLA_SP_CONFIG_CONST_LOCAL_NOUPDATERAD_GAUSSTEST not fully implemented yet" // TODO
-#            define VANILLA_SP_UPDATERAD_KIND        VANILLA_SP_UPDATERAD_KIND_CONST_NOUPDATE
-#            define VANILLA_SP_NEIGHBORHOOD_OPTIM    VANILLA_SP_NEIGHBORHOOD_OPTIM_CONST_GAUSSTEST
+#            define VANILLA_SP_FORCE_NONLOCAL_STATS  1
 #    else
-#      error "Unhandled value for VANILLA_SP_CONFIG"
+//   always use gauss filter method as a first sparsifier in the following
+#            define VANILLA_SP_UPDATERAD_KIND        VANILLA_SP_UPDATERAD_KIND_CONST_NOUPDATE
+#            define VANILLA_SP_NEIGHBORHOOD_OPTIM    VANILLA_SP_NEIGHBORHOOD_OPTIM_CONST_GAUSSFILTER
+#            define VANILLA_SP_FORCE_NONLOCAL_STATS  1
+#      if (VANILLA_SP_CONFIG == VANILLA_SP_CONFIG_CONST_LOCAL_GAUSS_ONLY)
+#            define VANILLA_SP_MAX_GAUSSIAN_ITER     2
+#            define VANILLA_SP_GAUSSIAN_SCALE_TARGET 42
+#      elif (VANILLA_SP_CONFIG == VANILLA_SP_CONFIG_CONST_LOCAL_GAUSS_ONE_7x7)
+#            define VANILLA_SP_MAX_GAUSSIAN_ITER     3
+#            define VANILLA_SP_GAUSSIAN_SCALE_TARGET 64
+#            define VANILLA_SP_ADD_ONE_7x7           1
+#      elif (VANILLA_SP_CONFIG == VANILLA_SP_CONFIG_CONST_LOCAL_GAUSS_ENFORCEDSPACING)
+#            define VANILLA_SP_MAX_GAUSSIAN_ITER     3
+#            define VANILLA_SP_GAUSSIAN_SCALE_TARGET 64
+#            define VANILLA_SP_ADD_INVSQDIST_REPULSE 1
+#      else
+#        error "Unhandled value for VANILLA_SP_CONFIG"
+#      endif
 #    endif
 #  endif
 #endif
@@ -431,7 +462,7 @@ private:
     //   columns equal (or hopefully close to) fActivationDensityRatio * VANILLA_HTM_SHEET_2DSIZE
     template<typename ActivationLevelType>
     void _getActiveColumnsFromActivationLevels(const ActivationLevelType* pActivationLevelsPerCol,
-        std::vector<uint16>& vecOutputIndices, uint32* pOutputMinActivations) const;
+        std::vector<uint16>& vecOutputIndices, uint32* pOutputMinActivations);
 
 #ifdef VANILLA_SP_USE_LOCAL_INHIB
 
@@ -444,12 +475,23 @@ private:
     // implements _getActiveColumnsFromActivationLevels() when local inhib can be computed along x coordinates only
     template<typename ActivationLevelType, bool bOutputMinActivation>
     void _getActiveColumnsFromActivationLevelsWithLocalInhibAlongX(const ActivationLevelType* pActivationLevelsPerCol,
-        std::vector<uint16>& vecOutputIndices, uint32* pOutputMinActivations) const;
+        std::vector<uint16>& vecOutputIndices, uint32* pOutputMinActivations);
 
     // implements _getActiveColumnsFromActivationLevels() when local inhib requires full-blown neighborhood per column
     template<typename ActivationLevelType, bool bOutputMinActivation>
     void _getActiveColumnsFromActivationLevelsWithFullLocalInhib(const ActivationLevelType* pActivationLevelsPerCol,
-        std::vector<uint16>& vecOutputIndices, uint32* pOutputMinActivations) const;
+        std::vector<uint16>& vecOutputIndices, uint32* pOutputMinActivations);
+
+#    if (VANILLA_SP_NEIGHBORHOOD_OPTIM == VANILLA_SP_NEIGHBORHOOD_OPTIM_CONST_GAUSSFILTER)
+
+    template<typename ActivationLevelType, bool bOutputMinActivation>
+    void _reduceActivationsByGaussianFilter(const ActivationLevelType* pActivationLevelsPerCol, uint32* pOutputMinActivation);
+
+    uint32* _pTmpGaussY;
+    uint32* _pTmpGaussX;
+    uint32* _pReducedActivations;
+
+#    endif // VANILLA_SP_NEIGHBORHOOD_OPTIM_CONST_GAUSSTEST or VANILLA_SP_NEIGHBORHOOD_OPTIM_CONST_ENFSPACING
 
 #    ifdef VANILLA_SP_USE_BOOSTING
 
@@ -472,7 +514,7 @@ private:
     // implements _getActiveColumnsFromActivationLevels() when bucket inhib mode is selected
     template<typename ActivationLevelType, bool bOutputMinActivation>
     void _getActiveColumnsFromActivationLevelsWithBucketInhib(const ActivationLevelType* pActivationLevelsPerCol,
-        std::vector<uint16>& vecOutputIndices, uint32* pOutputMinActivations) const;
+        std::vector<uint16>& vecOutputIndices, uint32* pOutputMinActivations);
 
 #    ifdef VANILLA_SP_USE_BOOSTING
 
@@ -491,7 +533,7 @@ private:
     // implements _getActiveColumnsFromActivationLevels() when global inhibition is selected
     template<typename ActivationLevelType, bool bOutputMinActivation>
     void _getActiveColumnsFromActivationLevelsWithGlobalInhib(const ActivationLevelType* pActivationLevelsPerCol,
-        std::vector<uint16>& vecOutputIndices, uint32* pOutputMinActivations) const;
+        std::vector<uint16>& vecOutputIndices, uint32* pOutputMinActivations);
 
     // implements _onUpdateOverThresholdRatioTarget() when global inhibition is selected
     void _onUpdateOverThresholdRatioTargetWithGlobalInhib();

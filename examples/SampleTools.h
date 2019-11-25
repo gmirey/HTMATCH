@@ -76,9 +76,19 @@ namespace HTMATCH {
             color1K<float>(float(value) * 0.125f, outRed, outGreen, outBlue);                       
         }
 
+        // When uScale32 == 32   : same as colorBoosting    128 -> 16.0 ; 256 -> 32.0 ; 512 -> 64.0
+        // When uScale32 == 16   :                          128 -> 24.0 ; 256 -> 32.0 ; 512 -> 48.0
+        // When uScale32 == 64   :                          192 -> 16.0 ; 256 -> 32.0 ; 384 -> 64.0
+        template<unsigned int uScale32>
+        static void colorScaledBoosting(uint16 value, uint8& outRed, uint8& outGreen, uint8& outBlue) {
+            float fMinus256 = float(value) - 256.0f;
+            color1K<float>(std::max(0.0f, 32.0f + fMinus256 * (float(uScale32) * 0.00390625f)), outRed, outGreen, outBlue);                       
+        }
+        ; // template termination
+
     };
 
-    // Currently designed to be somewhat "clear" when viewed col major on a 64x32 bitmap
+    // Currently designed to be somewhat "clear" when viewed col major on four 64x32 bitmaps
     class FixedDigitEncoder {
     public:
         FixedDigitEncoder() {

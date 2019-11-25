@@ -26,17 +26,6 @@
 
 #include "vanillaHTM/VanillaHTMConfig.h"
 
-/*
-#define VANILLA_SP_SUBNAMESPACE     LocalOptim16
-#  define VANILLA_SP_CONFIG           VANILLA_SP_CONFIG_CONST_LOCAL_NOUPDATERAD_ALL_OPTIM
-#  define VANILLA_SP_SYNAPSE_KIND     VANILLA_SP_SYNAPSE_KIND_CONST_USE_FIXED16
-#  include "vanillaHTM/VanillaSPGen.h"
-#  include "vanillaHTM/VanillaSPImpl.h"
-#  undef VANILLA_SP_CONFIG
-#  undef VANILLA_SP_SYNAPSE_KIND
-#undef VANILLA_SP_SUBNAMESPACE
-*/
-
 #define VANILLA_SP_SUBNAMESPACE     GlobalNoBoosting32
 #  define VANILLA_SP_CONFIG           VANILLA_SP_CONFIG_CONST_GLOBAL_NOBOOSTING
 #  define VANILLA_SP_SYNAPSE_KIND     VANILLA_SP_SYNAPSE_KIND_CONST_USE_FLOAT32
@@ -253,6 +242,33 @@
 #  undef VANILLA_SP_SYNAPSE_KIND
 #undef VANILLA_SP_SUBNAMESPACE
 
+#define VANILLA_SP_SUBNAMESPACE     GaussTest32
+#  define VANILLA_SP_CONFIG           VANILLA_SP_CONFIG_CONST_LOCAL_GAUSS_ONLY
+#  define VANILLA_SP_SYNAPSE_KIND     VANILLA_SP_SYNAPSE_KIND_CONST_USE_FLOAT32
+#  include "vanillaHTM/VanillaSPGen.h"
+#  include "vanillaHTM/VanillaSPImpl.h"
+#  undef VANILLA_SP_CONFIG
+#  undef VANILLA_SP_SYNAPSE_KIND
+#undef VANILLA_SP_SUBNAMESPACE
+
+#define VANILLA_SP_SUBNAMESPACE     GaussTest16
+#  define VANILLA_SP_CONFIG           VANILLA_SP_CONFIG_CONST_LOCAL_GAUSS_ONLY
+#  define VANILLA_SP_SYNAPSE_KIND     VANILLA_SP_SYNAPSE_KIND_CONST_USE_FIXED16
+#  include "vanillaHTM/VanillaSPGen.h"
+#  include "vanillaHTM/VanillaSPImpl.h"
+#  undef VANILLA_SP_CONFIG
+#  undef VANILLA_SP_SYNAPSE_KIND
+#undef VANILLA_SP_SUBNAMESPACE
+
+#define VANILLA_SP_SUBNAMESPACE     GaussTest8
+#  define VANILLA_SP_CONFIG           VANILLA_SP_CONFIG_CONST_LOCAL_GAUSS_ONLY
+#  define VANILLA_SP_SYNAPSE_KIND     VANILLA_SP_SYNAPSE_KIND_CONST_USE_FIXED8
+#  include "vanillaHTM/VanillaSPGen.h"
+#  include "vanillaHTM/VanillaSPImpl.h"
+#  undef VANILLA_SP_CONFIG
+#  undef VANILLA_SP_SYNAPSE_KIND
+#undef VANILLA_SP_SUBNAMESPACE
+
 using namespace HTMATCH;
 
 #include "examples/SampleTools.h"
@@ -262,7 +278,7 @@ using namespace HTMATCH;
 template<class VanillaSPKind>
 static void _reportPerfTest(const FixedDigitEncoder& inputEncoder, size_t uThousandsOfEpochs = 1u)
 {
-    static const char* tConfigTitles[11] = {
+    static const char* tConfigTitles[13u] = {
         "<unknown>",
         "Global inhib, noboost",                                                    // 1
         "Bucket inhib, noboost",                                                    // 2
@@ -272,8 +288,10 @@ static void _reportPerfTest(const FixedDigitEncoder& inputEncoder, size_t uThous
         "Local inhib, boost 0.1",                                                   // 6
         "Local inhib, boost 0.1, correct dynamic radius",                           // 7
         "Local inhib, boost 0.1, no radius update",                                 // 8
-        "Local inhib, boost 0.1, no radius update, optimized neighbor sampling",    // 9
-        "Local inhib, boost 0.1, no radius update, gaussian filter test",           // 10
+        "Local inhib, boost 0.1, optimized neighbor sampling",                      // 9
+        "Local inhib, boost 0.1, gaussian filter test",                             // 10
+        "Local inhib, boost 0.1, gaussian filter + 1-winner over 7x7",              // 11
+        "Local inhib, boost 0.1, gaussian filter + enforced spacing 6.5",           // 12
     };
     static const char* tSynapseKindTitles[4u] = {
         "<unknown>",
@@ -321,6 +339,13 @@ int main()
 {
     FixedDigitEncoder inputEncoder;
 
+    _reportPerfTest<LocalNoRadiusUpdate32::VanillaSP>(inputEncoder, 5u);
+
+    _reportPerfTest<GaussTest32::VanillaSP>(inputEncoder, 20u);
+    _reportPerfTest<GaussTest16::VanillaSP>(inputEncoder, 20u);
+    _reportPerfTest<GaussTest8::VanillaSP>(inputEncoder, 20u);
+
+/*
     _reportPerfTest<GlobalNoBoosting32::VanillaSP>(inputEncoder, 30u);
     _reportPerfTest<GlobalNoBoosting16::VanillaSP>(inputEncoder, 30u);
     _reportPerfTest<GlobalNoBoosting8::VanillaSP>(inputEncoder, 30u);
@@ -344,14 +369,19 @@ int main()
     _reportPerfTest<LocalDefault32::VanillaSP>(inputEncoder, 5u);
     _reportPerfTest<LocalDefault16::VanillaSP>(inputEncoder, 5u);
     _reportPerfTest<LocalDefault8::VanillaSP>(inputEncoder, 5u);
+*/
+
 /*
     _reportPerfTest<LocalCorrectedRadius32::VanillaSP>(inputEncoder, 5u);
     _reportPerfTest<LocalCorrectedRadius16::VanillaSP>(inputEncoder, 5u);
     _reportPerfTest<LocalCorrectedRadius8::VanillaSP>(inputEncoder, 5u);
 */
+
+/*
     _reportPerfTest<LocalNoRadiusUpdate32::VanillaSP>(inputEncoder, 5u);
     _reportPerfTest<LocalNoRadiusUpdate16::VanillaSP>(inputEncoder, 5u);
     _reportPerfTest<LocalNoRadiusUpdate8::VanillaSP>(inputEncoder, 5u);
+*/
 
     std::cout << "\nAll Done." << std::endl;
     std::string sHop;

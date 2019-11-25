@@ -85,10 +85,14 @@
 
 #define VANILLA_SP_CONFIG_CONST_LOCAL_CORRECTEDUPDATERAD      7    // local inhibition, having fixed the span avg computation
 #define VANILLA_SP_CONFIG_CONST_LOCAL_NOUPDATERAD             8    // local inhibition, keeping inhib radius constant
-#define VANILLA_SP_CONFIG_CONST_LOCAL_NOUPDATERAD_ALL_OPTIM   9    // local inhibition, constant radius, optim neighbor-sampling
-#define VANILLA_SP_CONFIG_CONST_LOCAL_NOUPDATERAD_GAUSSTEST   10   // local inhibition, gaussian filter over radius +
+#define VANILLA_SP_CONFIG_CONST_LOCAL_ALL_OPTIM               9    // local inhibition, constant radius, optim neighbor-sampling
+#define VANILLA_SP_CONFIG_CONST_LOCAL_GAUSS_ONLY              10   // local inhibition with n-pass reduction by gaussian filter
+                                                                   //   over a 31x31 kernel
+#define VANILLA_SP_CONFIG_CONST_LOCAL_GAUSS_ONE_7x7           11   // local inhibition using gaussian filter (like GAUSS_ONLY) +
                                                                    //   single-winner over 7x7 kernel (=> fixed ~2% sparsity)
-
+#define VANILLA_SP_CONFIG_CONST_LOCAL_GAUSS_ENFORCEDSPACING   12   // local inhibition using gaussian filter (like GAUSS_ONLY) +
+                                                                   //   enforced min euclidean distance 6.5
+                                                                   //   => max ~2.75%, hopefully mean 2%
 //----------------------------------------
 // Vanilla SpatialPooler synaptic configurations
 //   #define VANILLA_SP_SYNAPSE_KIND to one of the following values before including "VanillaSPGen.h"
@@ -136,8 +140,8 @@
                                                              // I mean it.
 
 #define VANILLA_SP_NEIGHBORHOOD_OPTIM_CONST_ALGORITHM   1    // multi-pass optimizations and tweaks applied to neighbor searches.
-#define VANILLA_SP_NEIGHBORHOOD_OPTIM_CONST_GAUSSTEST   2    // diff against med-sized gaussian filter, then one-winner on 7x7
-                                                             //   kernel (=>fixed 2% density)
+#define VANILLA_SP_NEIGHBORHOOD_OPTIM_CONST_GAUSSFILTER 2    // diff against med-sized gaussian filter, then one-winner on 7x7
+                                                             //   kernel (=>fixed ~2% density)
 
 #define VANILLA_SP_MIN_AREA_SIDE_SIZE                   6u   // less than radius 3 (inhib or potential) and we'd be better
                                                              //   resorting to global
