@@ -139,6 +139,7 @@ namespace HTMATCH { namespace GDI {
 
             Gdiplus::GdiplusStartupInput gdiplusStartupInput;
             if (Gdiplus::Status::Ok != Gdiplus::GdiplusStartup(&_gdiplusToken, &gdiplusStartupInput, NULL)) {
+	            free(_BmpData.Scan0);
                 return false;
             }
 
@@ -160,6 +161,8 @@ namespace HTMATCH { namespace GDI {
 
             if(!RegisterClassEx(&wc)) {
                 MessageBox(NULL, L"Window Registration Failed!", L"Error!", MB_ICONEXCLAMATION | MB_OK);
+	            free(_BmpData.Scan0);
+	            Gdiplus::GdiplusShutdown(_gdiplusToken);
                 return false;
             }
 
@@ -173,6 +176,8 @@ namespace HTMATCH { namespace GDI {
 
             if(_hwnd == NULL) {
                 MessageBox(NULL, L"Window Creation Failed!", L"Error!", MB_ICONEXCLAMATION | MB_OK);
+	            free(_BmpData.Scan0);
+	            Gdiplus::GdiplusShutdown(_gdiplusToken);
                 return false;
             }
 

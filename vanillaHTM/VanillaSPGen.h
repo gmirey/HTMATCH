@@ -160,8 +160,16 @@ namespace HTMATCH {
 #if defined(VANILLA_SP_SUBNAMESPACE)
     namespace VANILLA_SP_SUBNAMESPACE {
 #endif
+
 // - - - - - - - - - - - - - - - - - - - -
-// The VanillaSP class definition, at last!
+// - - - - - - - - - - - - - - - - - - - -
+// The 'Vanilla' Spatial Pooler class definition, at last!
+// - - - - - - - - - - - - - - - - - - - -
+// - - - - - - - - - - - - - - - - - - - -
+
+
+// - - - - - - - - - - - - - - - - - - - -
+// VanillaSP class
 // - - - - - - - - - - - - - - - - - - - -
 // HTM Spatial Pooler is in charge of converting any input to a sparsely encoded representation,
 //   while providing semantic overlap, optimal distribution of activations, as well as learning

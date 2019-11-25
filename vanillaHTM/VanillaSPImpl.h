@@ -71,7 +71,7 @@ static void _integrateBinaryFieldToMovingAverages(float* pColMajorMovingAverages
         size_t uBit = uIndex & 0x003Fu;
         float fValueNow = float((pBinaryBitmap[uQword] >> uBit) & 1uLL);
         float fPrevValue = *pCurrentVal;
-        *pCurrentVal = (fPrevValue * fWindowMinusOne + fValueNow) * fInvWindow;
+        *pCurrentVal = std::min(1.0f, std::max(0.0f, (fPrevValue * fWindowMinusOne) + (fValueNow * fInvWindow)));
     }
 }
 
