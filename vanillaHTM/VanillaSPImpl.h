@@ -71,7 +71,7 @@ static void _integrateBinaryFieldToMovingAverages(float* pColMajorMovingAverages
         size_t uBit = uIndex & 0x003Fu;
         float fValueNow = float((pBinaryBitmap[uQword] >> uBit) & 1uLL);
         float fPrevValue = *pCurrentVal;
-        *pCurrentVal = std::min(1.0f, std::max(0.0f, (fPrevValue * fWindowMinusOne) + (fValueNow * fInvWindow)));
+        *pCurrentVal = (fPrevValue * fWindowMinusOne + fValueNow) * fInvWindow;
     }
 }
 
@@ -282,14 +282,15 @@ static float _getMaxFromRange(u16fast uStartX, u16fast uSizeX, u16fast uStartY, 
 // One of the helper-methods for implementing a very-optimized sum or max filter over a rectangular kernel.
 // @see _computeOptiForSum, _computeOptiForMax, _computeOptiForBest
 // - - - - - - - - - - - - - - - - - - - -
-template<typename ValType, typename OutType, typename IntegrationFunc>
-static void _computeRowMajorGFromColMajorValues(const ValType* pColumnValues, OutType* outG, OutType startVal,
+template<typename ValType, typename OutType, typename InitFunc, typename IntegrationFunc>
+static void _computeRowMajorGFromColMajorValues(const ValType* pColumnValues, OutType* outG, InitFunc initializer,
     IntegrationFunc integrator, u8fast uRadius, u8fast uKernelSize, u8fast uKernelCountY, u8fast uRemainderY,
     u8fast uAfterRemainderY, u8fast uLastKernelSize)
 {
+    OutType integratedVal;
     const ValType* pInput = pColumnValues;
     // start new integration for first kernel
-    OutType integratedVal = startVal;
+    initializer(integratedVal);
     u8fast uRelY = 0u;
     // integrate values without emitting output, for the first "uRadius" count of them
     for (; uRelY < uRadius; uRelY++, pInput++) {
@@ -312,7 +313,7 @@ static void _computeRowMajorGFromColMajorValues(const ValType* pColumnValues, Ou
         }
     }
     // start new integration for one kernel after that
-    integratedVal = startVal;
+    initializer(integratedVal);
     // integrate values and emit output for the remaining positions until sheet height
     for (uRelY = 0u; uRelY < uRemainderY; uRelY++, pInput++, outG += VANILLA_HTM_SHEET_WIDTH) {
         integrator(integratedVal, *pInput);
@@ -326,7 +327,7 @@ static void _computeRowMajorGFromColMajorValues(const ValType* pColumnValues, Ou
         *outG = integratedVal;
     }
     // Starts another kernel after that, if need be to reach sheet height + uRadius (still wrapped)
-    integratedVal = startVal;
+    initializer(integratedVal);
     // integrate values and emit output for all positions until uRadius count of wrapped Y have been visited
     for (uRelY = 0u; uRelY < uLastKernelSize; uRelY++, pInput++, outG += VANILLA_HTM_SHEET_WIDTH) {
         integrator(integratedVal, *pInput);
@@ -339,11 +340,14 @@ static void _computeRowMajorGFromColMajorValues(const ValType* pColumnValues, Ou
 // One of the helper-methods for implementing a very-optimized sum or max filter over a rectangular kernel.
 // @see _computeSumFromOpti, _computeMaxFromOpti, _computeBestFromOpti
 // - - - - - - - - - - - - - - - - - - - -
-template<typename ValType, typename OutType, typename IntegrationFunc>
-static void _computeRowMajorRevHFromColMajorValues(const ValType* pColumnValues, OutType* outRevH, OutType startVal,
+template<typename ValType, typename OutType, typename InitFunc, typename IntegrationFunc>
+static void _computeRowMajorRevHFromColMajorValues(const ValType* pColumnValues, OutType* outRevH, InitFunc initializer,
     IntegrationFunc integrator, u8fast uRadius, u8fast uKernelSize, u8fast uKernelCount, u8fast uRemainderY,
     u8fast uAfterRemainderY, u8fast uLastKernelSize)
 {
+
+
+
     // TODO
 }
 ; // template termination

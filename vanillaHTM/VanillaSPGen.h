@@ -196,7 +196,8 @@ public:
         // @nupic.core: columnDimensions                // now fixed to VANILLA_HTM_SHEET_WIDTH x VANILLA_HTM_SHEET_HEIGHT (64x32)
 
         // @nupic.core: potentialRadius
-        uint8 uPotentialConnectivityRadius = VANILLA_SP_DEFAULT_POTENTIAL_RADIUS,   // different default, otherwise nearly similar (only in 2D, and only along width if >15)
+        uint8 uPotentialConnectivityRadius = VANILLA_SP_DEFAULT_POTENTIAL_RADIUS,   // different default, otherwise nearly similar
+                                                                                    //  (only in 2D, and only along width if >15)
 
         // @nupic.core: potentialPct
         float fPotentialConnectivityRatio = VANILLA_SP_DEFAULT_POTENTIAL_RATIO,     // 'ratio' since this is not a percentage...
@@ -236,7 +237,7 @@ public:
 
     // - - - - - - - - - - - - - - - - - - - -
     // Bread and butter "compute" method, similar to vanilla HTM spatial pooler...
-    // Nb: Input Indices shall be col-major, z-minor => index 35 is (x=1;y=3;z=0). Output indices will be col-major too.
+    // Nb: Input Indices shall be col-major, depth-last => index 35 is (x=1;y=3;z=0). Output indices will be col-major too.
     // Optional: if non-null, pOutputBinaryBitmap will be filled with same info as 'vecOutputIndices',
     //   however in bitfield-form, for no additional overhead.
     // - - - - - - - - - - - - - - - - - - - -
@@ -309,7 +310,7 @@ public:
         //   'uPotentialConnectivityRadius', and spanning across all 'uNumberOfInputSheets')
         uint16 _uCount;                                                         
 
-        // Table of pre-synaptic cell indices, for each of the potential synapse (col-major, z-minor)
+        // Table of pre-synaptic cell indices, for each of the potential synapse (col-major, depth-last)
         uint16 _tPreSynIndex[VANILLA_SP_MAX_SYNAPSES_PER_SEG];
 
         // Table of current permanence values. This is the heart of the dynamic part of the model, and where most of the
