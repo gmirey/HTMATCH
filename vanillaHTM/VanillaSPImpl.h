@@ -985,7 +985,7 @@ void VanillaSP::_computeUnrestrictedActivationLevels(const uint64* pInputBinaryB
         for (const uint64 *pCurrentInputQword = pInputBinaryBitmap, *pEndInput = pInputBinaryBitmap+uIterCount;
                 pCurrentInputQword < pEndInput; pCurrentInputQword++, pCurrentConnectivityFieldQword++) {
             uint64 uOverlapOnThisQword = (*pCurrentConnectivityFieldQword) & (*pCurrentInputQword);
-            uLevelOnThisColumn += __popcnt64(uOverlapOnThisQword);
+            uLevelOnThisColumn += countSetBits64(uOverlapOnThisQword);
         }
         *pCurrentColOutput = uint16(uLevelOnThisColumn);
     }

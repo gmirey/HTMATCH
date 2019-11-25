@@ -111,7 +111,7 @@ namespace HTMATCH {
         return (uMagic * 0x0101010101010101uLL) >> 56u;
 #else
         // falback to piecewise on 32b if not a 64b target
-        uint32 uSum = countSetBits32_software(uint32(uValue))) + countSetBits32_software(uint32(uValue>>32u));
+        uint32 uSum = countSetBits32_software(uint32(uValue)) + countSetBits32_software(uint32(uValue>>32u));
         return uint64(uSum);
 #endif
     }
@@ -168,7 +168,7 @@ namespace HTMATCH {
         return countSetBits64_software(uValue);
 #  endif
 #else
-        uint32 uSum = countSetBits32(uint32(uValue))) + countSetBits32(uint32(uValue>>32u));
+        uint32 uSum = countSetBits32(uint32(uValue)) + countSetBits32(uint32(uValue>>32u));
         return uint64(uSum);
 #endif
     }

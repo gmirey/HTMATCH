@@ -522,7 +522,7 @@ private:
     uint64* _pTmpBinaryOverThresholdActivations;
 #ifdef VANILLA_SP_USE_CONNECTIVITY_FIELD_OPTI
     uint64* _pConnectivityFields;                   // ... here one such bitfield for each minicolumn !
-    uint64  _uConnectivityFieldsQwordSizePerColumn;
+    size_t  _uConnectivityFieldsQwordSizePerColumn;
 #endif
 
     // Other temporary buffers and one-per-column tables
