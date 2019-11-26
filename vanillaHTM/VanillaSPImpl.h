@@ -49,6 +49,12 @@
 #include <algorithm>
 #include <cmath>
 
+//#define VANILLA_SP_DEBUG    1
+#ifdef VANILLA_SP_DEBUG
+#  include <iostream>
+#  include <string>
+#endif
+
 namespace HTMATCH {
 #if defined(VANILLA_SP_SUBNAMESPACE)
     namespace VANILLA_SP_SUBNAMESPACE {
@@ -780,9 +786,9 @@ static void _initMapPotentialsFullyLocal(VanillaSP::Segment& segment, u16fast uX
 //   After init, we won't use this same method, as we never brute-force or way through it: we'll rather update whenever a synapse
 //     changes from connected to unconnected status (or the other way around)
 // - - - - - - - - - - - - - - - - - - - -
-static void _initConnectivityField(const VanillaSP::Segment& segment, uint64* pConnectivityField)
+static void _initConnectivityField(const VanillaSP::Segment& segment, uint64* pConnectivityField, size_t uInputSheetsCount)
 {
-    memset((void*)pConnectivityField, 0, VANILLA_HTM_SHEET_2DSIZE >> 3u);
+    memset((void*)pConnectivityField, 0, (VANILLA_HTM_SHEET_2DSIZE * uInputSheetsCount) >> 3u);
     u16fast uCount = segment._uCount;
     const uint16* pPreSyn = segment._tPreSynIndex;
     const VANILLA_SP_SYN_PERM_TYPE* pPerm = segment._tPermValue;
@@ -930,6 +936,9 @@ static u16fast _reduceByAmount(const ActivationLevelType* pActivationLevelsPerCo
 }
 ; // template termination
 
+// - - - - - - - - - - - - - - - - - - - -
+// Same as above, but multiplies the reduction by a given factor (as fixed pt, 8b after point)
+// - - - - - - - - - - - - - - - - - - - -
 static u16fast _reduceByAmountScaled(const uint32* pStartLevelsPerCol, const uint32* pReduction,
     uint32 uScale8bAfterPoint, uint32* pResult)
 {
@@ -946,6 +955,24 @@ static u16fast _reduceByAmountScaled(const uint32* pStartLevelsPerCol, const uin
     }
     return uNonZeroCount;
 }
+
+#ifdef VANILLA_SP_DEBUG
+// - - - - - - - - - - - - - - - - - - - -
+// Debug helper method
+// - - - - - - - - - - - - - - - - - - - -
+static void _debugConnectivityField(const uint64* pConnectivityField, size_t uConnectivityFieldsQwordSizePerColumn)
+{
+    size_t uQword = 0u;
+    while (uQword < uConnectivityFieldsQwordSizePerColumn) {
+        for (size_t uIter = 0u; uIter < 2u; uIter++, uQword++) {
+            for (uint64 uBit = 0u; uBit < 64u; uBit++) {
+                std::cout << ((pConnectivityField[uQword] >> uBit) & 1uLL);
+            }
+        }
+        std::cout << std::endl;
+    }
+}
+#endif
 
 // - - - - - - - - - - - - - - - - - - - -
 // VanillaSP ctor
@@ -1044,7 +1071,7 @@ VanillaSP::VanillaSP(uint8 uNumberOfInputSheets, uint8 uPotentialConnectivityRad
     pCurrentSeg = _pSegments;
     for (u16fast uIndex = 0u; uIndex < VANILLA_HTM_SHEET_2DSIZE;
             uIndex++, pCurrentSeg++, pCurrentField += _uConnectivityFieldsQwordSizePerColumn) {
-        _initConnectivityField(*pCurrentSeg, pCurrentField);
+        _initConnectivityField(*pCurrentSeg, pCurrentField, _uInputSheetsCount);
     }
 #endif
 
@@ -1065,6 +1092,12 @@ VanillaSP::VanillaSP(uint8 uNumberOfInputSheets, uint8 uPotentialConnectivityRad
 #    endif // VANILLA_SP_NEIGHBORHOOD_OPTIM_CONST_GAUSSTEST or VANILLA_SP_NEIGHBORHOOD_OPTIM_CONST_ENFSPACING
 #  endif // valueof VANILLA_SP_USE_LOCAL_INHIB
 #endif // VANILLA_SP_USE_LOCAL_INHIB
+
+#if defined(VANILLA_SP_DEBUG) && defined(VANILLA_SP_USE_CONNECTIVITY_FIELD_OPTI)
+    std::cout << "first cell connectivity:\n";
+    _debugConnectivityField(_pConnectivityFields, _uConnectivityFieldsQwordSizePerColumn);
+    std::cout << std::endl;
+#endif
 }
 
 // - - - - - - - - - - - - - - - - - - - -
@@ -1159,6 +1192,11 @@ void VanillaSP::_computeUnrestrictedActivationLevels(const uint64* pInputBinaryB
             uLevelOnThisColumn += countSetBits64(uOverlapOnThisQword);
         }
         *pCurrentColOutput = uint16(uLevelOnThisColumn);
+#  if defined(VANILLA_SP_DEBUG)
+        if (pCurrentColOutput == pOutputActivationLevelsPerCol) {
+            std::cout << "@Iter " << _uEpoch << ", first cell raw activation=" << uLevelOnThisColumn << std::endl;
+        }
+#  endif
     }
 #else
     const Segment *pCurrentSeg = _pSegments;
