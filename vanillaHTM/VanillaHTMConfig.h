@@ -129,7 +129,7 @@
 
 // Miscellaneous
 
-#define VANILLA_SP_BOOSTING_VALUE_SWEET                 0.1f // cf. results from @marty1885
+#define VANILLA_SP_BOOSTING_VALUE_SWEET                 0.98f // cf. results from @marty1885
 
 #define VANILLA_SP_LOCAL_INHIB_TYPE_NOMINAL             1    // local inhibition is centered on currently considered column
 #define VANILLA_SP_LOCAL_INHIB_TYPE_BUCKET              2    // local inhibition is in fact setup as fixed, separated "buckets"

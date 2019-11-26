@@ -125,6 +125,21 @@ namespace HTMATCH { namespace GDI {
         }
         ; // template termination
 
+        static uint8* getZeroedByteBufferForSheetBitmap(Gdiplus::Bitmap* pBitmap) {
+            static const Gdiplus::Rect rectFullSheet(0, 0, VANILLA_HTM_SHEET_WIDTH, VANILLA_HTM_SHEET_HEIGHT);
+            if (Gdiplus::Status::Ok == pBitmap->LockBits(&rectFullSheet,
+                    Gdiplus::ImageLockModeWrite|Gdiplus::ImageLockModeUserInputBuf, PixelFormat24bppRGB, &_BmpData)) {
+                std::memset(_BmpData.Scan0, 0, VANILLA_HTM_SHEET_2DSIZE * 3u);
+                return (uint8*)(_BmpData.Scan0);
+            } else {
+                return 0;
+            }
+        }
+
+        static void whenDoneWithByteBufferOver(Gdiplus::Bitmap* pBitmap) {
+            pBitmap->UnlockBits(&_BmpData);
+        }
+
         static bool Init()
         {
             _uLastCharTicks = 0;

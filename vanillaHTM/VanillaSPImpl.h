@@ -49,8 +49,9 @@
 #include <algorithm>
 #include <cmath>
 
-//#define VANILLA_SP_DEBUG    1
-#ifdef VANILLA_SP_DEBUG
+//#define VANILLA_SP_DEBUG        1
+//#define VANILLA_SP_TRACE_STATS  1
+#if defined(VANILLA_SP_DEBUG) || defined(VANILLA_SP_TRACE_STATS)
 #  include <iostream>
 #  include <string>
 #endif
@@ -664,10 +665,26 @@ static float _computeCorrectedAvgConnectedSpanFor(u16fast uX, u16fast uY, u16fas
 // - - - - - - - - - - - - - - - - - - - -
 static uint16 _getBoostFactorUint16(float fTargetActiveRatio, float fCurrentActivRatio)
 {
+    // LINEAR boost
+    // see rationale for the linear boost function at
+    // https://discourse.numenta.org/t/mapping-the-hyper-parameter-space-of-classifcation-using-sp/6815/5
+    //float fArg = (fTargetActiveRatio - fCurrentActivRatio) * VANILLA_SP_USE_BOOSTING;
+    //float fBoostFactor = 1.0f + fArg;
+
+    // RCP boost
+    //fCurrentActivRatio = std::max(fCurrentActivRatio, fTargetActiveRatio * (1.0f/128.0f));
+    //float fBoostFactor = std::min(3.0f, fTargetActiveRatio / fCurrentActivRatio);
+
+    // EXP boost
+    //float fArg = (fTargetActiveRatio - fCurrentActivRatio) * VANILLA_SP_USE_BOOSTING;
+    //float fBoostFactor = std::exp(fArg);
+
+    // LOG boost
+    fCurrentActivRatio = std::max(fCurrentActivRatio, fTargetActiveRatio * (1.0f/128.0f));
+    float fArg = std::min(32.0f, fCurrentActivRatio / fTargetActiveRatio);
+    float fBoostFactor = 1.0f - (std::log(fArg) / 4.0f);
+
     // Boost factor is here a 16b fixed point, with 8b after dot (=> 256 represents 1.0)
-    float fArg = (fTargetActiveRatio - fCurrentActivRatio) * VANILLA_SP_USE_BOOSTING;
-    // see rationale for the linear boost function at https://discourse.numenta.org/t/mapping-the-hyper-parameter-space-of-classifcation-using-sp/6815/5
-    float fBoostFactor = 1.0f + fArg;
     return uint16(std::round(fBoostFactor * 256.0f));
 }
 #endif
@@ -918,7 +935,8 @@ static void _computeGaussian(const ActivationLevelType* pActivationLevelsPerCol,
 // returns number of remaining non-zeros (computed with unbranching methods)
 // - - - - - - - - - - - - - - - - - - - -
 template<typename ActivationLevelType>
-static u16fast _reduceByAmount(const ActivationLevelType* pActivationLevelsPerCol, const uint32* pReduction, uint32* pResult) {
+static u16fast _reduceByAmount(const ActivationLevelType* pActivationLevelsPerCol, const uint32* pReduction, uint32* pResult)
+{
     u16fast uNonZeroCount = 0u;
     const ActivationLevelType* pCurrentActivation = pActivationLevelsPerCol;
     const uint32* pCurrentReduction = pReduction;
@@ -948,13 +966,40 @@ static u16fast _reduceByAmountScaled(const uint32* pStartLevelsPerCol, const uin
     uint32* pCurrentResult = pResult ;
     for (u16fast uIndex = 0u; uIndex < VANILLA_HTM_SHEET_2DSIZE;
         uIndex++, pCurrentActivation++, pCurrentReduction++, pCurrentResult++) {
-        int32 iReduced = int32(*pCurrentActivation) - ((int32(uScale8bAfterPoint) * int32(*pCurrentReduction)) >> 8);
+        int32 iReduction = (int32(uScale8bAfterPoint) * int32(*pCurrentReduction)) >> 8;
+        int32 iReduced = int32(*pCurrentActivation) - iReduction;
         int32 iMaskIfNonNeg = ~(iReduced >> 31);
         *pCurrentResult = iMaskIfNonNeg & iReduced;
         uNonZeroCount += u16fast(iMaskIfNonNeg & 1u);
     }
     return uNonZeroCount;
 }
+
+// - - - - - - - - - - - - - - - - - - - -
+// - - - - - - - - - - - - - - - - - - - -
+template<typename ActivationLevelType>
+static u16fast _reduceByAmountPointwiseInvScaled(const ActivationLevelType* pActivationLevelsPerCol,
+    const uint16* pInvPointwiseScale, const uint32* pReduction, uint32* pResult)
+{
+    u16fast uNonZeroCount = 0u;
+    const ActivationLevelType* pCurrentActivation = pActivationLevelsPerCol;
+    const uint16* pCurrentInvScale = pInvPointwiseScale;
+    const uint32* pCurrentReduction = pReduction;
+    uint32* pCurrentResult = pResult ;
+    for (u16fast uIndex = 0u; uIndex < VANILLA_HTM_SHEET_2DSIZE;
+        uIndex++, pCurrentActivation++, pCurrentReduction++, pCurrentInvScale++, pCurrentResult++) {
+        int32 iReduction = (int32(*pCurrentReduction) * 256) / int32(*pCurrentInvScale);
+        int32 iReduced = (sizeof(ActivationLevelType) == 2u) ? 
+            ((int32(*pCurrentActivation) << 8) - iReduction) :   // if raw, shift to 8b after point
+            (int32(*pCurrentActivation) - iReduction);           // otherwise already both 8b after point
+        int32 iMaskIfNonNeg = ~(iReduced >> 31);
+        *pCurrentResult = iMaskIfNonNeg & iReduced;
+        uNonZeroCount += u16fast(iMaskIfNonNeg & 1u);
+    }
+    return uNonZeroCount;
+}
+; // template termination
+
 
 #ifdef VANILLA_SP_DEBUG
 // - - - - - - - - - - - - - - - - - - - -
@@ -999,10 +1044,12 @@ VanillaSP::VanillaSP(uint8 uNumberOfInputSheets, uint8 uPotentialConnectivityRad
     _pAverageActiveRatioPerColumn = new float[VANILLA_HTM_SHEET_2DSIZE];
     _pAverageOverThresholdRatioPerColumn = new float[VANILLA_HTM_SHEET_2DSIZE];
     _pOverThresholdRatioTargetPerColumn = new float[VANILLA_HTM_SHEET_2DSIZE];
+    _pInactiveEpochsPerColumn = new uint32[VANILLA_HTM_SHEET_2DSIZE];
     for (size_t uCol = 0; uCol < size_t(VANILLA_HTM_SHEET_2DSIZE); uCol++) {
         _pAverageActiveRatioPerColumn[uCol] = fActivationDensityRatio;
         _pAverageOverThresholdRatioPerColumn[uCol] = VANILLA_SP_OVERTHRESHOLD_INIT;
         _pOverThresholdRatioTargetPerColumn[uCol] = VANILLA_SP_OVERTHRESHOLD_INIT * VANILLA_SP_DEFAULT_TARGET_VS_MAX_RATIO;
+        _pInactiveEpochsPerColumn[uCol] = 0u;
     }
     _pTmpRawActivationLevelsPerCol = new uint16[VANILLA_HTM_SHEET_2DSIZE];
 #ifdef VANILLA_SP_USE_BOOSTING
@@ -1112,6 +1159,7 @@ VanillaSP::~VanillaSP()
     delete[] _pAverageActiveRatioPerColumn;
     delete[] _pAverageOverThresholdRatioPerColumn;
     delete[] _pOverThresholdRatioTargetPerColumn;
+    delete[] _pInactiveEpochsPerColumn;
 
     delete[] _pTmpRawActivationLevelsPerCol;
 #ifdef VANILLA_SP_USE_BOOSTING
@@ -1247,6 +1295,7 @@ void VanillaSP::_onEvaluateBoostingFromColumnUsageWithGlobalInhib()
     for (u16fast uX = 0u; uX < VANILLA_HTM_SHEET_WIDTH; uX++) {
         for (u16fast uY = 0u; uY < VANILLA_HTM_SHEET_HEIGHT; uY++, pCurrentBoosting++, pCurrentActivRatio++) {
             *pCurrentBoosting = _getBoostFactorUint16(fLocalActivityAverage, *pCurrentActivRatio);
+            //*pCurrentBoosting = _getBoostFactorUint16(_fActivationDensityRatio, *pCurrentActivRatio);
         }
     }
 }
@@ -1265,22 +1314,24 @@ void VanillaSP::_computeActiveColumnsAndLearnWhenBoosted(const uint64* pInputBin
         if (bLearning) {
             _updateSynapsesOnActiveColumnsTowardsCurrentInput(pInputBinaryBitmap, vecOutputIndices);
             _onEvaluateColumnUsage(_pTmpRawActivationLevelsPerCol, pOutputBinaryBitmap);
-            _onIncreasePermanencesForUnderUsedColums();
+            if (17u == (_uEpoch & 0x0000001FuLL)) {
+                _onIncreasePermanencesForUnderUsedColums();
 #  if defined(VANILLA_SP_USE_LOCAL_INHIB) && !defined(VANILLA_SP_FORCE_NONLOCAL_STATS)
 #    if (VANILLA_SP_USE_LOCAL_INHIB == VANILLA_SP_LOCAL_INHIB_TYPE_NOMINAL)
-            if (_uInhibitionSideSize < VANILLA_SP_MIN_AREA_SIDE_SIZE || _uInhibitionSideSize >= VANILLA_HTM_SHEET_WIDTH) {
-                _onEvaluateBoostingFromColumnUsageWithGlobalInhib();
-            } else if (_uInhibitionSideSize >= VANILLA_HTM_SHEET_HEIGHT) {
-                _onEvaluateBoostingFromColumnUsageWithLocalInhibAlongX();
-            } else {
-                _onEvaluateBoostingFromColumnUsageWithFullLocalInhib();
-            }
+                if (_uInhibitionSideSize < VANILLA_SP_MIN_AREA_SIDE_SIZE || _uInhibitionSideSize >= VANILLA_HTM_SHEET_WIDTH) {
+                    _onEvaluateBoostingFromColumnUsageWithGlobalInhib();
+                } else if (_uInhibitionSideSize >= VANILLA_HTM_SHEET_HEIGHT) {
+                    _onEvaluateBoostingFromColumnUsageWithLocalInhibAlongX();
+                } else {
+                    _onEvaluateBoostingFromColumnUsageWithFullLocalInhib();
+                }
 #    else // hopefully VANILLA_SP_USE_LOCAL_INHIB == VANILLA_SP_LOCAL_INHIB_TYPE_BUCKET
-            _onEvaluateBoostingFromColumnUsageWithBucketInhib();
+                _onEvaluateBoostingFromColumnUsageWithBucketInhib();
 #    endif // value of VANILLA_SP_USE_LOCAL_INHIB 
 #  else  // !VANILLA_SP_USE_LOCAL_INHIB || VANILLA_SP_FORCE_NONLOCAL_STATS
-            _onEvaluateBoostingFromColumnUsageWithGlobalInhib();
+                _onEvaluateBoostingFromColumnUsageWithGlobalInhib();
 #  endif // VANILLA_SP_USE_LOCAL_INHIB
+            }
         }
     }
 }
@@ -1300,7 +1351,9 @@ void VanillaSP::_computeActiveColumnsAndLearnWhenNoBoosting(const uint64* pInput
         if (bLearning) {
             _updateSynapsesOnActiveColumnsTowardsCurrentInput(pInputBinaryBitmap, vecOutputIndices);
             _onEvaluateColumnUsage(_pTmpRawActivationLevelsPerCol, pOutputBinaryBitmap);
-            _onIncreasePermanencesForUnderUsedColums();
+            if (33u == (_uEpoch & 0x0000003FuLL)) {
+                _onIncreasePermanencesForUnderUsedColums();
+            }
         }
     }
 }
@@ -1390,14 +1443,24 @@ void VanillaSP::_reduceActivationsByGaussianFilter(const ActivationLevelType* pA
     }
     _computeGaussian<ActivationLevelType, bOutputMinActivation>(pActivationLevelsPerCol, _pTmpGaussY, _pTmpGaussX,
         pOutputMinActivation);
+#if defined(VANILLA_SP_USE_BOOSTING) && defined(VANILLA_SP_GAUSS_INVBOOST_INHIB)
+    u16fast uCurrentCount = _reduceByAmountPointwiseInvScaled<ActivationLevelType>(pActivationLevelsPerCol, _pBoostingPerCol,
+        _pTmpGaussX, _pReducedActivations);
+#else
     u16fast uCurrentCount = _reduceByAmount<ActivationLevelType>(pActivationLevelsPerCol, _pTmpGaussX, _pReducedActivations);
+#endif
     if (uCurrentCount >= 42) {
         // usually we won't have reached target sparsity 2% (41 active) in only one reduction-by-gaussian filter,
         //   so we still have VANILLA_SP_MAX_GAUSSIAN_ITER-1 to get closer to it
         for (u16fast uIterateMore = 1u; uIterateMore < VANILLA_SP_MAX_GAUSSIAN_ITER; uIterateMore++) {
             _computeGaussian<uint32, bOutputMinActivation>(_pReducedActivations, _pTmpGaussY, _pTmpGaussX,
                 pOutputMinActivation);
+#if defined(VANILLA_SP_USE_BOOSTING) && defined(VANILLA_SP_GAUSS_INVBOOST_INHIB)
+            uCurrentCount = _reduceByAmountPointwiseInvScaled<uint32>(_pReducedActivations, _pBoostingPerCol,
+                _pTmpGaussX, _pReducedActivations);
+#else
             uCurrentCount = _reduceByAmount<uint32>(_pReducedActivations, _pTmpGaussX, _pReducedActivations);
+#endif
             if (uCurrentCount < 42u) {
                 break;
             }
@@ -1412,14 +1475,14 @@ void VanillaSP::_reduceActivationsByGaussianFilter(const ActivationLevelType* pA
         uint32 tTmpReduced[VANILLA_HTM_SHEET_2DSIZE];
         std::memcpy((void*)tTmpReduced, _pReducedActivations, sizeof(uint32_t)*VANILLA_HTM_SHEET_2DSIZE);
         uint32 uScale8bAfterPoint = 256u;
-        uint32 uScaleIncrease = 32u;
+        uint32 uScaleIncrease = 64u;
         do {
             uScale8bAfterPoint += uScaleIncrease;
             u16fast uCountNow = _reduceByAmountScaled(tTmpReduced, _pTmpGaussX, uScale8bAfterPoint, _pReducedActivations);
-            if (uCountNow < 38u) {
+            if (uCountNow < 39u) {
                 if (uScaleIncrease > 1u) {
                     uScale8bAfterPoint -= uScaleIncrease;
-                    uScaleIncrease >>= 2u;
+                    uScaleIncrease >>= 1u;
                 } else {
                     uCurrentCount = uCountNow;
                 }
@@ -1548,6 +1611,7 @@ void VanillaSP::_onEvaluateBoostingFromColumnUsageWithLocalInhibAlongX() {
             _pAverageActiveRatioPerColumn) * fInvNumNeighbors;
         for (u16fast uY = 0u; uY < VANILLA_HTM_SHEET_HEIGHT; uY++, pCurrentBoosting++, pCurrentActivRatio++) {
             *pCurrentBoosting = _getBoostFactorUint16(fLocalActivityAverage, *pCurrentActivRatio);
+            //*pCurrentBoosting = _getBoostFactorUint16(_fActivationDensityRatio, *pCurrentActivRatio);
         }
     }
 }
@@ -1568,6 +1632,7 @@ void VanillaSP::_onEvaluateBoostingFromColumnUsageWithFullLocalInhib() {
             float fLocalActivityAverage = _getSumFromRange<true, true>(uStartX, uSize, uStartY, uSize,
                 _pAverageActiveRatioPerColumn) * fInvNumNeighbors;
             *pCurrentBoosting = _getBoostFactorUint16(fLocalActivityAverage, *pCurrentActivRatio);
+            //*pCurrentBoosting = _getBoostFactorUint16(_fActivationDensityRatio, *pCurrentActivRatio);
         }
     }
 }
@@ -1681,6 +1746,7 @@ void VanillaSP::_onEvaluateBoostingFromColumnUsageWithBucketInhib() {
                 for (u16fast uY = uStartY, uEndY = uStartY + uBucketSize; uY < uEndY;
                         uY++, pCurrentBoosting++, pCurrentActivRatio++) {
                     *pCurrentBoosting = _getBoostFactorUint16(fLocalActivityAverage, *pCurrentActivRatio);
+                    //*pCurrentBoosting = _getBoostFactorUint16(_fActivationDensityRatio, *pCurrentActivRatio);
                 }
             }
         }
@@ -1876,16 +1942,33 @@ void VanillaSP::_updateSynapsesOnActiveColumnsTowardsCurrentInput(const uint64* 
 // - - - - - - - - - - - - - - - - - - - -
 void VanillaSP::_onIncreasePermanencesForUnderUsedColums()
 {
+    u8fast uPotentialConnectivitySideSize = 1u + 2u * _uPotentialConnectivityRadius;
+    u32fast uSq = u32fast(uPotentialConnectivitySideSize) * u32fast(uPotentialConnectivitySideSize);
+    u32fast uTotalCount = uSq * u32fast(_uInputSheetsCount);
+    u32fast uConnectedCount = u32fast(std::round(float(uTotalCount) * _fPotentialConnectivityRatio));
+    u32fast uMaxCount = std::min(uTotalCount-u32fast(1u), u32fast(VANILLA_SP_MAX_SYNAPSES_PER_SEG));
+    u16fast uRedrawCount = 0u;
+    u16fast uSemiRedrawCount = 0u;
+    uConnectedCount = std::min(uMaxCount, uConnectedCount);
+    uConnectedCount = std::max(u32fast(1u), uConnectedCount);
+#ifdef VANILLA_SP_ALLOW_REROLLS
+    uint16 pTmpBuffer[VANILLA_SP_MAX_SYNAPSES_PER_SEG];
+#endif
+    Rand synRand;
+    synRand.seed(uint32(_uEpoch));
     const float* pCurrentAverageOverThresholdRatio = _pAverageOverThresholdRatioPerColumn;
     const float* pCurrentOverThresholdRatioTarget = _pOverThresholdRatioTargetPerColumn;
+    const float* pCurrentAverageActivation = _pAverageActiveRatioPerColumn;
+    uint32* pCurrentInactiveEpochs = _pInactiveEpochsPerColumn;
     Segment* pCurrentSegment = _pSegments;
-    for (u16fast uIndex = 0u; uIndex < VANILLA_HTM_SHEET_2DSIZE;
-            uIndex++, pCurrentAverageOverThresholdRatio++, pCurrentOverThresholdRatioTarget++, pCurrentSegment++) {
+    for (u16fast uIndex = 0u; uIndex < VANILLA_HTM_SHEET_2DSIZE; uIndex++, pCurrentAverageOverThresholdRatio++,
+            pCurrentOverThresholdRatioTarget++, pCurrentAverageActivation++, pCurrentSegment++, pCurrentInactiveEpochs++) {
         if (*pCurrentAverageOverThresholdRatio < *pCurrentOverThresholdRatioTarget) {
 #ifdef VANILLA_SP_USE_CONNECTIVITY_FIELD_OPTI
             uint64* pCurrentConnectivityField = _pConnectivityFields + _uConnectivityFieldsQwordSizePerColumn * uIndex;
 #endif
             u16fast uCount = pCurrentSegment->_uCount;
+            u16fast uConnectedCount = 0u;
             const uint16* pPreSyn = pCurrentSegment->_tPreSynIndex;
             VANILLA_SP_SYN_PERM_TYPE* pPerm = pCurrentSegment->_tPermValue;
             for (u16fast uSyn = 0u; uSyn < uCount; uSyn++, pPreSyn++, pPerm++) {
@@ -1902,17 +1985,102 @@ void VanillaSP::_onIncreasePermanencesForUnderUsedColums()
                         u16fast uPreSynCellBit = uPreSynCellIndex & 0x003Fu;
                         uint64 uPreSynCellMask = 1uLL << uPreSynCellBit;
                         pCurrentConnectivityField[uPreSynCellQword] |= uPreSynCellMask;
+                        uConnectedCount++;
                     }
                 } else {
                     permanenceValue = _increasePermanence(permanenceValue, VANILLA_SP_SYN_PERM_BELOW_STIM_INC);
+                    uConnectedCount++;
                 }
                 *pPerm = permanenceValue;
 #else  // !VANILLA_SP_USE_CONNECTIVITY_FIELD_OPTI
-                *pPerm = _increasePermanence(permanenceValue, VANILLA_SP_SYN_PERM_BELOW_STIM_INC);
+                VANILLA_SP_SYN_PERM_TYPE permanence = _increasePermanence(permanenceValue, VANILLA_SP_SYN_PERM_BELOW_STIM_INC);
+                *pPerm = permanence;
+                if (permanence = VANILLA_SP_SYN_CONNECTED_PERM) {
+                    uConnectedCount++;
+                }
+#endif
+#ifdef VANILLA_SP_ALLOW_REROLLS
+                u16fast uThreeQuartersMax = (3u * uCount) >> 2u;
+                if (uConnectedCount > uThreeQuartersMax) {
+                    // this cell already has 3/4 its potential as connected, and still languishes...
+                    float fRatioAbove = float(uConnectedCount - uThreeQuartersMax) * 4.0f / float(uCount);
+                    // it will get a chance to redraw its potential from scratch !
+                    if (synRand.getNextAsFloat01() < fRatioAbove) {
+                        uRedrawCount++;
+                        u16fast uY = uIndex & VANILLA_HTM_SHEET_YMASK;
+                        u16fast uX = uIndex >> VANILLA_HTM_SHEET_SHIFT_DIVY;
+                        _initMapPotentialsFullyLocal(*pCurrentSegment, uX, uY, &synRand, uPotentialConnectivitySideSize,
+                            _uInputSheetsCount, _uPotentialConnectivityRadius, uTotalCount, u16fast(uConnectedCount), pTmpBuffer);
+#ifdef VANILLA_SP_USE_CONNECTIVITY_FIELD_OPTI
+                        _initConnectivityField(*pCurrentSegment, pCurrentConnectivityField, _uInputSheetsCount);
+#endif
+                    }
+                }
 #endif
             }
+        } 
+#ifdef VANILLA_SP_ALLOW_REROLLS
+        else {
+            uint32 uInactiveEpochCount = *pCurrentInactiveEpochs; 
+            if (uInactiveEpochCount > 200u && *pCurrentAverageActivation < 0.75f * _fActivationDensityRatio) {
+                uint32 uInactiveEpochOver200 = uInactiveEpochCount-200u;
+                if (uInactiveEpochOver200 > (synRand.getNext() & 0x00000FFFu)) {
+                    uSemiRedrawCount++;
+                    uint16* pCurrent = pTmpBuffer;
+                    u16fast uStartZIndex = 0u;
+                    u16fast uY = uIndex & VANILLA_HTM_SHEET_YMASK;
+                    u16fast uX = uIndex >> VANILLA_HTM_SHEET_SHIFT_DIVY;
+                    for (u16fast uCandidateZ = 0u; uCandidateZ < _uInputSheetsCount; uCandidateZ++, uStartZIndex += VANILLA_HTM_SHEET_2DSIZE) {
+                        for (u16fast uCandidateRelX = 0u; uCandidateRelX < uPotentialConnectivitySideSize; uCandidateRelX++) {
+                            u16fast uCandidateX = u16fast(uX - _uPotentialConnectivityRadius + uCandidateRelX) & VANILLA_HTM_SHEET_XMASK;
+                            u16fast uStartXIndex = uStartZIndex + (uCandidateX << VANILLA_HTM_SHEET_SHIFT_DIVY);
+                            for (u16fast uCandidateRelY = 0u; uCandidateRelY < uPotentialConnectivitySideSize; uCandidateRelY++, pCurrent++) {
+                                u16fast uCandidateY = u16fast(uY - _uPotentialConnectivityRadius + uCandidateRelY) & VANILLA_HTM_SHEET_YMASK;
+                                *pCurrent = uint16(uStartXIndex + uCandidateY);
+                            }
+                        }
+                    }
+#ifdef VANILLA_SP_USE_CONNECTIVITY_FIELD_OPTI
+                    uint64* pCurrentConnectivityField = _pConnectivityFields + _uConnectivityFieldsQwordSizePerColumn * uIndex;
+#endif
+                    // randomly change between 5 and 20 synapses
+                    uint32 uSynapsesToSwitch = 5u + (synRand.getNext() & 0x0000000Fu);
+                    uint32 uRemaining = uTotalCount;
+                    for (uint32 uSyn = 0u; uSyn < uSynapsesToSwitch; uSyn++) {
+                        uint32 uPosToChange = synRand.getNext() % pCurrentSegment->_uCount;
+                        uint32 uChangedIndex = pCurrentSegment->_tPreSynIndex[uPosToChange];
+                        uint32 uNewIndex = synRand.getNext() % uRemaining;
+                        uRemaining--;
+                        pCurrentSegment->_tPreSynIndex[uPosToChange] = uChangedIndex;
+                        pCurrentSegment->_tPermValue[uPosToChange] = VANILLA_SP_SYN_CONNECTED_PERM + VANILLA_SP_SYN_PERM_BELOW_STIM_INC;
+#ifdef VANILLA_SP_USE_CONNECTIVITY_FIELD_OPTI
+                        u16fast uOldQword = uChangedIndex >> 6u;
+                        u16fast uOldBit = uChangedIndex & 0x003Fu;
+                        pCurrentConnectivityField[uOldQword] &= ~(1uLL << uOldBit);
+                        u16fast uNewQword = uNewIndex >> 6u;
+                        u16fast uNewBit = uNewIndex & 0x003Fu;
+                        pCurrentConnectivityField[uNewQword] |= (1uLL << uNewBit);
+#endif
+                    }
+                }
+            }
         }
+#endif
     }
+#ifdef VANILLA_SP_TRACE_STATS
+#  if (VANILLA_SP_CONFIG == VANILLA_SP_CONFIG_CONST_GLOBAL_NOBOOSTING) && (VANILLA_SP_SYNAPSE_KIND == VANILLA_SP_SYNAPSE_KIND_CONST_USE_FLOAT32)
+    if (uRedrawCount > 0 || uSemiRedrawCount > 0)
+        std::cout << "*** global noboost had " << uRedrawCount << " columns fully redrawn and " << uSemiRedrawCount << " partial" << std::endl;
+#  endif
+#  if (VANILLA_SP_CONFIG == VANILLA_SP_CONFIG_CONST_GLOBAL) && (VANILLA_SP_SYNAPSE_KIND == VANILLA_SP_SYNAPSE_KIND_CONST_USE_FLOAT32)
+    if (uRedrawCount > 0 || uSemiRedrawCount > 0)
+        std::cout << "*** global with boosting had " << uRedrawCount << " columns fully redrawn and " << uSemiRedrawCount << " partial" << std::endl;
+#  endif
+#  if (VANILLA_SP_CONFIG == VANILLA_SP_CONFIG_CONST_LOCAL_GAUSS_ONLY) && (VANILLA_SP_SYNAPSE_KIND == VANILLA_SP_SYNAPSE_KIND_CONST_USE_FLOAT32)
+    if (uRedrawCount > 0 || uSemiRedrawCount > 0)
+        std::cout << "*** gaussian test had " << uRedrawCount << " columns fully redrawn and " << uSemiRedrawCount << " partial" << std::endl;
+#  endif
+#endif
 }
 
 // - - - - - - - - - - - - - - - - - - - -
@@ -1929,10 +2097,83 @@ void VanillaSP::_onEvaluateColumnUsage(const uint16* pRawActivationLevelsPerCol,
         }
     }
     _integrateBinaryFieldToMovingAverages(_pAverageOverThresholdRatioPerColumn, _pTmpBinaryOverThresholdActivations,
-        _uColumnUsageIntegrationWindow);
+        std::min(_uColumnUsageIntegrationWindow, _uEpochLearning+1u));
     _integrateBinaryFieldToMovingAverages(_pAverageActiveRatioPerColumn, pResultingBinaryBitmap,
-        _uColumnUsageIntegrationWindow);
+        std::min(_uColumnUsageIntegrationWindow, _uEpochLearning+1u));
+#ifdef VANILLA_SP_ALLOW_REROLLS
+    uint32* pCurrentInactivity = _pInactiveEpochsPerColumn;
+    for (u16fast uIndex = 0u; uIndex < VANILLA_HTM_SHEET_2DSIZE; uIndex++, pCurrentInactivity++) {
+        u16fast uQword = uIndex >> 6u;
+        u16fast uBit = uIndex & 0x003Fu;
+        *pCurrentInactivity += uint32((uQword >> uBit) & 1uLL);
+    }
+#endif
 }
+
+// - - - - - - - - - - - - - - - - - - - -
+// - - - - - - - - - - - - - - - - - - - -
+void VanillaSP::getAverageActivationStats(float fUltraLowValue, uint16* outUltraLowCount, float fUltraHighValue, uint16* outUltraHighCount,
+    float* outAverageActivation, float* outActivationDeviation) const
+{
+    float fSum = 0.0f;
+    uint16 uLowCount = 0u;
+    uint16 uHighCount = 0u;
+    float fMax = 0.0f;
+    float fMin = 1.0f;
+    const float* pCurrentActivation = _pAverageActiveRatioPerColumn;
+    for (u16fast uIndex = 0u; uIndex < VANILLA_HTM_SHEET_2DSIZE; uIndex++, pCurrentActivation++) {
+        float fCurrentActivation = *pCurrentActivation;
+        if (fCurrentActivation < fUltraLowValue)
+            uLowCount++;
+        if (outUltraHighCount && fCurrentActivation > fUltraHighValue)
+            uHighCount++;
+        if (fCurrentActivation > fMax)
+            fMax = fCurrentActivation;
+        if (fCurrentActivation < fMin)
+            fMin = fCurrentActivation;
+        fSum += fCurrentActivation;
+    }
+    if (outUltraLowCount)
+        *outUltraLowCount = uLowCount;
+    if (outUltraHighCount)
+        *outUltraHighCount = uHighCount;
+    float fAverage = fSum / float(VANILLA_HTM_SHEET_2DSIZE);
+    if (outAverageActivation)
+        *outAverageActivation = fAverage;
+    if (outActivationDeviation) {
+        float fVarSum = 0.0f;
+        pCurrentActivation = _pAverageActiveRatioPerColumn;
+        for (u16fast uIndex = 0u; uIndex < VANILLA_HTM_SHEET_2DSIZE; uIndex++, pCurrentActivation++) {
+            float fCurrentActivation = *pCurrentActivation;
+            float fDiffToAvg = (fCurrentActivation - fAverage);
+            fVarSum += fDiffToAvg * fDiffToAvg;
+        }
+        *outActivationDeviation = std::sqrt(fVarSum / float(VANILLA_HTM_SHEET_2DSIZE));
+#ifdef VANILLA_SP_TRACE_STATS
+#  if (VANILLA_SP_CONFIG == VANILLA_SP_CONFIG_CONST_GLOBAL_NOBOOSTING) && (VANILLA_SP_SYNAPSE_KIND == VANILLA_SP_SYNAPSE_KIND_CONST_USE_FLOAT32)
+        std::cout << "global noboost:\n\tMin=" << fMin << " Avg=" << fAverage << " Max=" << fMax << std::endl;
+        std::cout << "\tDev=" << (*outActivationDeviation) << " Below " << fUltraLowValue << ": " << uLowCount;
+        std::cout << " Above " << fUltraHighValue << ": " << uHighCount << std::endl;
+#  endif
+#  if (VANILLA_SP_CONFIG == VANILLA_SP_CONFIG_CONST_GLOBAL) && (VANILLA_SP_SYNAPSE_KIND == VANILLA_SP_SYNAPSE_KIND_CONST_USE_FLOAT32)
+        std::cout << "global with boosting:\n\tMin=" << fMin << " Avg=" << fAverage << " Max=" << fMax << std::endl;
+        std::cout << "\tDev=" << (*outActivationDeviation) << " Below " << fUltraLowValue << ": " << uLowCount;
+        std::cout << " Above " << fUltraHighValue << ": " << uHighCount << std::endl;
+#  endif
+#  if (VANILLA_SP_CONFIG == VANILLA_SP_CONFIG_CONST_LOCAL_NOUPDATERAD) && (VANILLA_SP_SYNAPSE_KIND == VANILLA_SP_SYNAPSE_KIND_CONST_USE_FLOAT32)
+        std::cout << "no updt rad:\n\tMin=" << fMin << " Avg=" << fAverage << " Max=" << fMax << std::endl;
+        std::cout << "\tDev=" << (*outActivationDeviation) << " Below " << fUltraLowValue << ": " << uLowCount;
+        std::cout << " Above " << fUltraHighValue << ": " << uHighCount << std::endl;
+#  endif
+#  if (VANILLA_SP_CONFIG == VANILLA_SP_CONFIG_CONST_LOCAL_GAUSS_ONLY) && (VANILLA_SP_SYNAPSE_KIND == VANILLA_SP_SYNAPSE_KIND_CONST_USE_FLOAT32)
+        std::cout << "gaussian test:\n\tMin=" << fMin << " Avg=" << fAverage << " Max=" << fMax << std::endl;
+        std::cout << "\tDev=" << (*outActivationDeviation) << " Below " << fUltraLowValue << ": " << uLowCount;
+        std::cout << " Above " << fUltraHighValue << ": " << uHighCount << std::endl;
+#  endif
+#endif
+    }
+}
+
 
 #if defined(VANILLA_SP_SUBNAMESPACE)
     } // namespace VANILLA_SP_SUBNAMESPACE

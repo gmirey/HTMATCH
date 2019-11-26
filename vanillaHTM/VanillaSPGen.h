@@ -158,8 +158,10 @@
 #if (VANILLA_SP_SYNAPSE_KIND == VANILLA_SP_SYNAPSE_KIND_CONST_USE_FLOAT32)
 #  define VANILLA_SP_SYN_PERM_TYPE                  float           // obviously...
 #  define VANILLA_SP_SYN_SIGNED_PERM_TYPE           float           // how neat is that?
-#  define VANILLA_SP_SYN_PERM_INACTIVE_DEC          0.01f           // instead of nupic default 0.008
-#  define VANILLA_SP_SYN_PERM_ACTIVE_INC            0.06666667f     // instead of nupic default 0.05
+//#  define VANILLA_SP_SYN_PERM_INACTIVE_DEC          0.01f           // instead of nupic default 0.008
+//#  define VANILLA_SP_SYN_PERM_ACTIVE_INC            0.06666667f     // instead of nupic default 0.05
+#  define VANILLA_SP_SYN_PERM_INACTIVE_DEC          0.001953125f    // instead of nupic default 0.008
+#  define VANILLA_SP_SYN_PERM_ACTIVE_INC            0.015625f       // instead of nupic default 0.05
 #  define VANILLA_SP_SYN_CONNECTED_PERM             0.13333333f     // instead of nupic default 0.1
 #  define VANILLA_SP_SYN_PERM_BELOW_STIM_INC        0.016666667f    // one eigth, instead of nupic one tenth of connected
 #  define VANILLA_SP_SYN_PERM_TYPE_MAX              1.0             // shall never be crossed
@@ -167,8 +169,8 @@
 #  define VANILLA_SP_SYN_PERM_TYPE                  uint16          // 16b fixed point [0..65535] representing [0.0 .. 1.0]
 #  define VANILLA_SP_SYN_SIGNED_PERM_TYPE           int32           // we'll compute a few things on signed int32 before
                                                                     //   casting back to uint16
-#  define VANILLA_SP_SYN_PERM_INACTIVE_DEC          655u            // quite precisely the 0.01 above
-#  define VANILLA_SP_SYN_PERM_ACTIVE_INC            4369u           // quite precisely the 0.06667 above
+#  define VANILLA_SP_SYN_PERM_INACTIVE_DEC          128u            // quite precisely the 0.001953125 above
+#  define VANILLA_SP_SYN_PERM_ACTIVE_INC            1024u           // quite precisely the 0.015625 above
 #  define VANILLA_SP_SYN_CONNECTED_PERM             8738u           // quite precisely the 0.13333 above
 #  define VANILLA_SP_SYN_PERM_BELOW_STIM_INC        1092u           // quite precisely the 0.016667 above
 #  define VANILLA_SP_SYN_PERM_TYPE_MAX              65535           // shall never be crossed, and represents 1.0
@@ -176,10 +178,10 @@
 #  define VANILLA_SP_SYN_PERM_TYPE                  uint8           // 8b fixed point [0..255] representing [0.0 .. 1.0]
 #  define VANILLA_SP_SYN_SIGNED_PERM_TYPE           int32           // we'll compute a few things on signed int32 before
                                                                     //   casting back to uint8
-#  define VANILLA_SP_SYN_PERM_INACTIVE_DEC          2u              // very roughly the 0.01 above
-#  define VANILLA_SP_SYN_PERM_ACTIVE_INC            17u             // quite precisely the 0.06667 above
-#  define VANILLA_SP_SYN_CONNECTED_PERM             34u             // quite precisely the 0.13333 above
-#  define VANILLA_SP_SYN_PERM_BELOW_STIM_INC        4u              // close to the 0.016667 above
+#  define VANILLA_SP_SYN_PERM_INACTIVE_DEC          1u              
+#  define VANILLA_SP_SYN_PERM_ACTIVE_INC            5u              
+#  define VANILLA_SP_SYN_CONNECTED_PERM             34u             
+#  define VANILLA_SP_SYN_PERM_BELOW_STIM_INC        5u              
 #  define VANILLA_SP_SYN_PERM_TYPE_MAX              255             // shall never be crossed, and represents 1.0
 #else
 #  error "no permanence values were adjusted for this value of VANILLA_SP_SYNAPSE_KIND"
@@ -350,6 +352,13 @@ public:
         //   cell on each round, when it is time to compute the current activation level of the segment.
         VANILLA_SP_SYN_PERM_TYPE _tPermValue[VANILLA_SP_MAX_SYNAPSES_PER_SEG];
     };
+
+    // - - - - - - - - - - - - - - - - - - - -
+    // Returns a few interesting stats to get an idea about how well-behaved the SP is
+    //   in terms of how well the activations are distributed across all available columns
+    // - - - - - - - - - - - - - - - - - - - -
+    void getAverageActivationStats(float fUltraLowValue, uint16* outUltraLowCount, float fUltraHighValue, uint16* outUltraHighCount,
+        float* outAverageActivation, float* outActivationDeviation) const;
 
     // - - - - - - - - - - - - - - - - - - - -
     // Static helper methods to auto-report about configuration choices for a particular class
@@ -577,6 +586,7 @@ private:
     float* _pAverageOverThresholdRatioPerColumn;
     float* _pAverageActiveRatioPerColumn;
     float* _pOverThresholdRatioTargetPerColumn;
+    uint32* _pInactiveEpochsPerColumn;
 
     // Properties from constructor params
 
