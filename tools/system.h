@@ -38,7 +38,7 @@
 #  define FORCE_INLINE_END
 #else
 #  define FORCE_INLINE            inline
-#  define FORCE_INLINE_END      __attribute__((always_inline))
+#  define FORCE_INLINE_END        __attribute__((always_inline))
 #endif
 
 #include <cstdint>
@@ -220,23 +220,24 @@ namespace HTMATCH {
     // a few unbranching conditional functions
     //
 
-    FORCE_INLINE int32 unbranchingAbs(int32 iValue) {
+    FORCE_INLINE int32 unbranchingAbs(int32 iValue) FORCE_INLINE_END {
         int32 iMaskIfNeg = iValue >> 31;
         return ((~iMaskIfNeg) & iValue) | (iMaskIfNeg & (-iValue));
     }
-    FORCE_INLINE int32 unbranchingClampLowToZero(int32 iValue) {
+    FORCE_INLINE int32 unbranchingClampLowToZero(int32 iValue) FORCE_INLINE_END {
         int32 iMaskIfNonNeg = ~(iValue >> 31);
         return iMaskIfNonNeg & iValue;
     }
-    FORCE_INLINE int32 unbranchingClampLowTo(int32 iMin, int32 iValue) {
+    FORCE_INLINE int32 unbranchingClampLowTo(int32 iMin, int32 iValue) FORCE_INLINE_END {
         int32 iMaskIfLowerThanMin = (iValue - iMin) >> 31;
         return (iMaskIfLowerThanMin & iMin) | ((~iMaskIfLowerThanMin) & iValue);
     }
-    FORCE_INLINE int32 unbranchingClampHighTo(int32 iMax, int32 iValue) {
+    FORCE_INLINE int32 unbranchingClampHighTo(int32 iMax, int32 iValue) FORCE_INLINE_END {
         int32 iMaskIfHigherThanMax = (iMax - iValue) >> 31;
         return (iMaskIfHigherThanMax & iMax) | ((~iMaskIfHigherThanMax) & iValue);
     }
-    FORCE_INLINE u16fast wrappedDistanceBetween(u16fast uIndex1, u16fast uIndex2, u16fast uMaskSpan, u16fast uSpanBits) {
+    FORCE_INLINE u16fast wrappedDistanceBetween(u16fast uIndex1, u16fast uIndex2, u16fast uMaskSpan,
+            u16fast uSpanBits) FORCE_INLINE_END {
         u16fast uDiff = uIndex1 - uIndex2;
         u16fast uAdditionalBitsToSign = sizeof(u16fast)*8u - uSpanBits;
         i16fast iAsSigned = i16fast(uDiff << uAdditionalBitsToSign) >> uAdditionalBitsToSign;
