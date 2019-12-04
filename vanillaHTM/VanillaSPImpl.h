@@ -44,6 +44,7 @@
 #endif
 
 #include "tools/system.h"
+#include "tools/bittools.h"
 #include "tools/rand.h"
 #include <vector>
 #include <algorithm>

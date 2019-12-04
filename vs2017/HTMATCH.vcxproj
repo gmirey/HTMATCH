@@ -23,8 +23,13 @@
     <ClCompile Include="..\examples\WinConsole.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\common\AxonalExpansion.h" />
+    <ClInclude Include="..\common\synapse.h" />
     <ClInclude Include="..\examples\SampleTools.h" />
     <ClInclude Include="..\examples\WinGDITools.h" />
+    <ClInclude Include="..\tools\bittools.h" />
+    <ClInclude Include="..\tools\mempage.h" />
+    <ClInclude Include="..\tools\parallel.h" />
     <ClInclude Include="..\tools\rand.h" />
     <ClInclude Include="..\tools\sdr.h" />
     <ClInclude Include="..\tools\system.h" />
