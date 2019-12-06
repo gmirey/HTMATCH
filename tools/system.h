@@ -69,6 +69,16 @@ namespace HTMATCH {
     // YMMV here... => you can experiment with disabling this macro at will...
     #define HTMATCH_COERCE_FAST8_TO_FAST16
 
+    // Usage recommendations:
+    // * It is recommended that you care about the range of your integer values, and thus the necessary bit sizes to carry them.
+    // * prefer using fixed-size in your structure definitions
+    // * consider using fastest-for-size versions in your function parameters and temporary variables
+    // * when converting an algorithm from fixed-size to fastest-for-size, do not forget to mask out the heading bits if there is
+    //   the possibility that some fixed-size cast would have been used for implicit masking in the original.
+    // * possibly consider refraining from converting everything to fastest-for-size, however... maybe it could impair your compiler
+    //   chances to detect and use vectorization optimizations? to investigate... Most fastest-for-size however would solve to 32b,
+    //   so even if you use fastest-for-size all over the place, there's still room for 8x32b vectors with AVX.
+
     // Fixed-size integers
 
     typedef unsigned char           uint8;
@@ -81,7 +91,7 @@ namespace HTMATCH {
     typedef int32_t                 int32;
     typedef int64_t                 int64;
 
-    // Fastest sizes integers, hopefully for target arch... in practice often just 1 per provider of the stdint library :x
+    // Fastest-for-size integers, hopefully for target arch... in practice often just 1 per provider of the stdint library :x
     // ... go figure
 
 #ifdef HTMATCH_COERCE_FAST8_TO_FAST16

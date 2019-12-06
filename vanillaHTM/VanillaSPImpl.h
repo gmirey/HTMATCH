@@ -231,26 +231,30 @@ static u16fast _getBestFromRange(u16fast uStartX, u16fast uSizeX, u16fast uStart
 // - - - - - - - - - - - - - - - - - - - -
 template<bool bCareForXWrap, bool bCareForYWrap>
 static float _getSumFromRange(u16fast uStartX, u16fast uSizeX, u16fast uStartY, u16fast uSizeY, const float* pColumnMajorFloatValues) {
-    float fResult = 0.0f;
-    i16fast iEndX = i16fast(uStartX)+i16fast(uSizeX);
-    i16fast iEndY = i16fast(uStartY)+i16fast(uSizeY);
-    if (bCareForXWrap) iEndX &= VANILLA_HTM_SHEET_XMASK;
-    if (bCareForYWrap) iEndY &= VANILLA_HTM_SHEET_YMASK;
-    for (i16fast iX = i16fast(uStartX); iX != iEndX; iX = bCareForXWrap ? ((iX+1) & VANILLA_HTM_SHEET_XMASK) : iX+1) {
-        if (bCareForYWrap) {
-            for (i16fast iY = i16fast(uStartY); iY != iEndY; iY = (iY+1) & VANILLA_HTM_SHEET_YMASK) {
-                fResult += pColumnMajorFloatValues[(iX << VANILLA_HTM_SHEET_SHIFT_DIVY) + iY];
-            }
+    u16fast uEndX = uStartX + uSizeX;
+    if (bCareForXWrap && uEndX > VANILLA_HTM_SHEET_WIDTH) {
+        float fToMaxX = _getSumFromRange<false, bCareForYWrap>(uStartX, VANILLA_HTM_SHEET_WIDTH-uStartX, uStartY, uSizeY, pColumnMajorFloatValues);
+        float fWrappedInX = _getSumFromRange<false, bCareForYWrap>(0u, uEndX-VANILLA_HTM_SHEET_WIDTH, uStartY, uSizeY, pColumnMajorFloatValues);
+        return fToMaxX + fWrappedInX;
+    } else {
+        u16fast uEndY = uStartY + uSizeY;
+        if (bCareForYWrap && uEndY > VANILLA_HTM_SHEET_HEIGHT) {
+            float fToMaxY = _getSumFromRange<false, false>(uStartX, uSizeX, uStartY, VANILLA_HTM_SHEET_HEIGHT-uStartY, pColumnMajorFloatValues);
+            float fWrappedInY = _getSumFromRange<false, false>(uStartX, uSizeX, 0u, uEndY-VANILLA_HTM_SHEET_HEIGHT, pColumnMajorFloatValues);
+            return fToMaxY + fWrappedInY;
         } else {
-            u16fast uIndex = u16fast(iX) << VANILLA_HTM_SHEET_SHIFT_DIVY;
-            uIndex += uStartY;
-            const float* pStartFloatValue = pColumnMajorFloatValues + uIndex;
-            for (const float *pCurrent = pStartFloatValue, *pEnd = pStartFloatValue + uSizeY; pCurrent < pEnd; pCurrent++) {
-                fResult += *pCurrent;
+            float fResult = 0.0f;
+            for (u16fast uX = uStartX; uX < uEndX; uX++) {
+                u16fast uIndex = uX << VANILLA_HTM_SHEET_SHIFT_DIVY;
+                const float* pColumnFloatValues = pColumnMajorFloatValues + uIndex;
+                for (u16fast uY = uStartY; uY < uEndY; uY++) {
+                    // currently non-vectorized, unless /fp:fast ; using fixpoint for values could make that optimization possible
+                    fResult += pColumnFloatValues[uY];
+                }
             }
+            return fResult;
         }
     }
-    return fResult;
 }
 ; // template termination
 
@@ -263,30 +267,30 @@ static float _getSumFromRange(u16fast uStartX, u16fast uSizeX, u16fast uStartY, 
 // - - - - - - - - - - - - - - - - - - - -
 template<bool bCareForXWrap, bool bCareForYWrap>
 static float _getMaxFromRange(u16fast uStartX, u16fast uSizeX, u16fast uStartY, u16fast uSizeY, const float* pColumnMajorFloatValues) {
-    float fMaxFound = 0.0f;
-    i16fast iEndX = i16fast(uStartX)+i16fast(uSizeX);
-    i16fast iEndY = i16fast(uStartY)+i16fast(uSizeY);
-    if (bCareForXWrap) iEndX &= VANILLA_HTM_SHEET_XMASK;
-    if (bCareForYWrap) iEndY &= VANILLA_HTM_SHEET_YMASK;
-    for (i16fast iX = i16fast(uStartX); iX != iEndX; iX = bCareForXWrap ? ((iX+1) & VANILLA_HTM_SHEET_XMASK) : iX+1) {
-        if (bCareForYWrap) {
-            for (i16fast iY = i16fast(uStartY); iY != iEndY; iY = (iY+1) & VANILLA_HTM_SHEET_YMASK) {
-                float fThere = pColumnMajorFloatValues[(iX << VANILLA_HTM_SHEET_SHIFT_DIVY) + iY];
-                if (fThere > fMaxFound)
-                    fMaxFound = fThere;
-            }
+    u16fast uEndX = uStartX + uSizeX;
+    if (bCareForXWrap && uEndX > VANILLA_HTM_SHEET_WIDTH) {
+        float fToMaxX = _getSumFromRange<false, bCareForYWrap>(uStartX, VANILLA_HTM_SHEET_WIDTH-uStartX, uStartY, uSizeY, pColumnMajorFloatValues);
+        float fWrappedInX = _getSumFromRange<false, bCareForYWrap>(0u, uEndX-VANILLA_HTM_SHEET_WIDTH, uStartY, uSizeY, pColumnMajorFloatValues);
+        return std::max(fToMaxX, fWrappedInX);
+    } else {
+        u16fast uEndY = uStartY + uSizeY;
+        if (bCareForYWrap && uEndY > VANILLA_HTM_SHEET_HEIGHT) {
+            float fToMaxY = _getSumFromRange<false, false>(uStartX, uSizeX, uStartY, VANILLA_HTM_SHEET_HEIGHT-uStartY, pColumnMajorFloatValues);
+            float fWrappedInY = _getSumFromRange<false, false>(uStartX, uSizeX, 0u, uEndY-VANILLA_HTM_SHEET_HEIGHT, pColumnMajorFloatValues);
+            return std::max(fToMaxY, fWrappedInY);
         } else {
-            u16fast uIndex = u16fast(iX) << VANILLA_HTM_SHEET_SHIFT_DIVY;
-            uIndex += uStartY;
-            const float* pStartFloatValue = pColumnMajorFloatValues + uIndex;
-            for (const float *pCurrent = pStartFloatValue, *pEnd = pStartFloatValue + uSizeY; pCurrent < pEnd; pCurrent++) {
-                float fThere = *pCurrent;
-                if (fThere > fMaxFound)
-                    fMaxFound = fThere;
+            float fMaxFound = 0.0f;
+            for (u16fast uX = uStartX; uX < uEndX; uX++) {
+                u16fast uIndex = uX << VANILLA_HTM_SHEET_SHIFT_DIVY;
+                const float* pColumnFloatValues = pColumnMajorFloatValues + uIndex;
+                for (u16fast uY = uStartY; uY < uEndY; uY++) {
+                    // currently non-vectorized ; using fixpoint for values could make that optimization possible
+                    fMaxFound = std::max(fMaxFound, pColumnFloatValues[uY]);
+                }
             }
+            return fMaxFound;
         }
     }
-    return fMaxFound;
 }
 ; // template termination
 
@@ -664,7 +668,7 @@ static float _computeCorrectedAvgConnectedSpanFor(u16fast uX, u16fast uY, u16fas
 // - - - - - - - - - - - - - - - - - - - -
 // Computes the boost factor to apply to a particular column, given a target and a current active ratio
 // - - - - - - - - - - - - - - - - - - - -
-static uint16 _getBoostFactorUint16(float fTargetActiveRatio, float fCurrentActivRatio)
+FORCE_INLINE static uint16 _getBoostFactorUint16(float fTargetActiveRatio, float fCurrentActivRatio) FORCE_INLINE_END 
 {
     // piecewise linear boost computation method
     //
@@ -863,44 +867,159 @@ static const uint32 k_gaussianFactors[15u] = {
     159u, 123u,  91u,  65u,  45u,
     29u,  19u,  11u,   7u,   4u,
 };
+// 15 factors along one orientation for '_getGaussianSum' implementation
+static const uint32 k_revGaussianFactors[15u] = {
+    4u, 7u,   11u,   19u,  29u,  
+    45u, 65u,  91u,  123u,  159u, 
+    199u, 237u, 273u, 302u, 320u, 
+};
 
-// - - - - - - - - - - - - - - - - - - - -
-// returns the sum of 15 samples along one axis and one direction, weighted by factors following a gaussian curve
-// - - - - - - - - - - - - - - - - - - - -
-template<typename ActivationLevelType, bool bIsY, bool bBackwards, bool bCareForWrap>
-static uint32 _getGaussianSum(const ActivationLevelType* pActivationLevelsPerCol, u16fast uX, u16fast uY)
-{
+template<typename ActivationLevelType>
+FORCE_INLINE static uint32 _getGaussianSumRev(const ActivationLevelType* pActivationLevels,
+        u16fast uAlongMinor, u16fast uAlongMajor, u16fast uMajorSize) FORCE_INLINE_END {
     uint32 uSum = 0u;
-    for (u16fast uOffset = 1u; uOffset <= 15u; uOffset++) {
-        u16fast uSampleX = i16fast(uX);
-        u16fast uSampleY = i16fast(uY);
-        if (bIsY) {
-            if (bCareForWrap) {
-                uSampleY += bBackwards ? (VANILLA_HTM_SHEET_HEIGHT-uOffset) : uOffset;
-                uSampleY &= VANILLA_HTM_SHEET_YMASK;
-            } else {
-                if (bBackwards)
-                    uSampleY -= uOffset;
-                else
-                    uSampleY += uOffset;
-            }
-        } else {
-            if (bCareForWrap) {
-                uSampleX += bBackwards ? (VANILLA_HTM_SHEET_WIDTH-uOffset) : uOffset;
-                uSampleX &= VANILLA_HTM_SHEET_XMASK;
-            } else {
-                if (bBackwards)
-                    uSampleX -= uOffset;
-                else
-                    uSampleX += uOffset;
-            }
+    if (uAlongMajor < 16u) {
+        u16fast uOffsetsBefore = 16u - uAlongMajor;
+        const ActivationLevelType* pStart = pActivationLevels + (uAlongMinor * uMajorSize) + uMajorSize - uOffsetsBefore;
+        for (u16fast uOffset = 0u; uOffset < uOffsetsBefore; uOffset++) {
+            uSum += uint32(pStart[uOffset]) * k_revGaussianFactors[uOffset];
         }
-        u16fast uSampleIndex = (uSampleX * VANILLA_HTM_SHEET_HEIGHT) + uSampleY;
-        uSum += uint32(pActivationLevelsPerCol[uSampleIndex]) * k_gaussianFactors[uOffset-1u];
+        pStart = pActivationLevels + (uAlongMinor * uMajorSize);
+        for (u16fast uOffset = uOffsetsBefore; uOffset < 15u; uOffset++) {
+            uSum += uint32(pStart[uOffset - uOffsetsBefore]) * k_revGaussianFactors[uOffset];
+        }
+    } else {
+        const ActivationLevelType* pStart = pActivationLevels + (uAlongMinor * uMajorSize) + uAlongMajor - 16u;
+        for (u16fast uOffset = 0u; uOffset < 15u; uOffset++) {
+            uSum += uint32(pStart[uOffset]) * k_revGaussianFactors[uOffset];
+        }
     }
     return uSum;
 }
 ; // template termination
+
+template<typename ActivationLevelType>
+FORCE_INLINE static uint32 _getGaussianSumFwd(const ActivationLevelType* pActivationLevels,
+        u16fast uAlongMinor, u16fast uAlongMajor, u16fast uMajorSize) FORCE_INLINE_END {
+    uint32 uSum = 0u;
+    if (uAlongMajor + 16u > uMajorSize) {
+        u16fast uOffsetsBefore = uMajorSize - uAlongMajor - 1u;
+        const ActivationLevelType* pStart = pActivationLevels + (uAlongMinor * uMajorSize) + uAlongMajor + 1u;
+        for (u16fast uOffset = 0u; uOffset < uOffsetsBefore; uOffset++) {
+            uSum += uint32(pStart[uOffset]) * k_gaussianFactors[uOffset];
+        }
+        pStart = pActivationLevels + (uAlongMinor * uMajorSize);
+        for (u16fast uOffset = uOffsetsBefore; uOffset < 15u; uOffset++) {
+            uSum += uint32(pStart[uOffset - uOffsetsBefore]) * k_gaussianFactors[uOffset];
+        }
+    } else {
+        const ActivationLevelType* pStart = pActivationLevels + (uAlongMinor * uMajorSize) + uAlongMajor + 1u;
+        for (u16fast uOffset = 0u; uOffset < 15u; uOffset++) {
+            uSum += uint32(pStart[uOffset]) * k_gaussianFactors[uOffset];
+        }
+    }
+    return uSum;
+}
+; // template termination
+
+/*
+template<typename ActivationLevelType>
+FORCE_INLINE static uint32 _getGaussianSumYrev(const ActivationLevelType* pActivationLevels,
+        u16fast uAlongMinor, u16fast uAlongMajor, u16fast uMajorSize) FORCE_INLINE_END {
+    uint32 uSum = 0u;
+    if (uAlongMajor + 16u > uMajorSize) {
+        u16fast uOffsetsBefore = 16u - uAlongMajor;
+        const ActivationLevelType* pStart = pActivationLevels + (uAlongMinor * uMajorSize) + uMajorSize - uOffsetsBefore;
+        for (u16fast uOffset = 0u; uOffset < uOffsetsBefore; uOffset++) {
+            uSum += uint32(pStart[uOffset]) * k_gaussianFactors[uOffset];
+        }
+        pStart = pActivationLevels + (uAlongMinor * uMajorSize);
+        for (u16fast uOffset = uOffsetsBefore; uOffset < 15u; uOffset++) {
+            uSum += uint32(pStart[uOffset - uOffsetsBefore]) * k_gaussianFactors[uOffset];
+        }
+    } else {
+        const ActivationLevelType* pStart = pActivationLevelsPerCol + (uCenterX << VANILLA_HTM_SHEET_SHIFT_DIVY) + uCenterY - 16u;
+        for (u16fast uOffset = 0u; uOffset < 15u; uOffset++) {
+            uSum += uint32(pStart[uOffset]) * k_revGaussianFactors[uOffset];
+        }
+    }
+    return uSum;
+}
+; // template termination
+
+template<typename ActivationLevelType>
+FORCE_INLINE static uint32 _getGaussianSumY(const ActivationLevelType* pActivationLevelsPerCol, 
+        u16fast uCenterX, u16fast uCenterY) FORCE_INLINE_END {
+    uint32 uSum = 0u;
+    if (uCenterY + 16u > VANILLA_HTM_SHEET_HEIGHT) {
+        u16fast uOffsetsBefore = VANILLA_HTM_SHEET_HEIGHT - uCenterY - 1u;
+        const ActivationLevelType* pStart = pActivationLevelsPerCol + (uCenterX << VANILLA_HTM_SHEET_SHIFT_DIVY) + uCenterY + 1u;
+        for (u16fast uOffset = 0u; uOffset < uOffsetsBefore; uOffset++) {
+            uSum += uint32(pStart[uOffset]) * k_gaussianFactors[uOffset];
+        }
+        pStart = pActivationLevelsPerCol + (uCenterX << VANILLA_HTM_SHEET_SHIFT_DIVY);
+        for (u16fast uOffset = uOffsetsBefore; uOffset < 15u; uOffset++) {
+            uSum += uint32(pStart[uOffset - uOffsetsBefore]) * k_gaussianFactors[uOffset];
+        }
+    } else {
+        const ActivationLevelType* pStart = pActivationLevelsPerCol + (uCenterX << VANILLA_HTM_SHEET_SHIFT_DIVY) + uCenterY + 1u;
+        for (u16fast uOffset = 0u; uOffset < 15u; uOffset++) {
+            uSum += uint32(pStart[uOffset]) * k_gaussianFactors[uOffset];
+        }
+    }
+    return uSum;
+}
+; // template termination
+
+template<typename ActivationLevelType>
+FORCE_INLINE static uint32 _getGaussianSumXrev(const ActivationLevelType* pActivationLevelsPerCol,
+        u16fast uCenterX, u16fast uCenterY) FORCE_INLINE_END {
+    uint32 uSum = 0u;
+    if (uCenterX < 16u) {
+        u16fast uOffsetsBefore = 16u - uCenterX;
+        const ActivationLevelType* pStart = pActivationLevelsPerCol +
+            ((VANILLA_HTM_SHEET_WIDTH - uOffsetsBefore) << VANILLA_HTM_SHEET_SHIFT_DIVY) + uCenterY;
+        for (u16fast uOffset = 0u; uOffset < uOffsetsBefore; uOffset++) {
+            uSum += uint32(pStart[uOffset*VANILLA_HTM_SHEET_HEIGHT]) * k_revGaussianFactors[uOffset];
+        }
+        pStart = pActivationLevelsPerCol + uCenterY;
+        for (u16fast uOffset = uOffsetsBefore; uOffset < 15u; uOffset++) {
+            uSum += uint32(pStart[(uOffset - uOffsetsBefore)*VANILLA_HTM_SHEET_HEIGHT]) * k_revGaussianFactors[uOffset];
+        }
+    } else {
+        const ActivationLevelType* pStart = pActivationLevelsPerCol + (uCenterX << VANILLA_HTM_SHEET_SHIFT_DIVY) + uCenterY - 15u;
+        for (u16fast uOffset = 0u; uOffset < 15u; uOffset++) {
+            uSum += uint32(pStart[uOffset*VANILLA_HTM_SHEET_HEIGHT]) * k_revGaussianFactors[uOffset];
+        }
+    }
+    return uSum;
+}
+; // template termination
+
+template<typename ActivationLevelType>
+FORCE_INLINE static uint32 _getGaussianSumX(const ActivationLevelType* pActivationLevelsPerCol,
+        u16fast uCenterX, u16fast uCenterY) FORCE_INLINE_END {
+    uint32 uSum = 0u;
+    if (uCenterX + 16u > VANILLA_HTM_SHEET_WIDTH) {
+        u16fast uOffsetsBefore = VANILLA_HTM_SHEET_WIDTH - uCenterX - 1u;
+        const ActivationLevelType* pStart = pActivationLevelsPerCol + ((uCenterX + 1u) << VANILLA_HTM_SHEET_SHIFT_DIVY) + uCenterY;
+        for (u16fast uOffset = 0u; uOffset < uOffsetsBefore; uOffset++) {
+            uSum += uint32(pStart[uOffset*VANILLA_HTM_SHEET_HEIGHT]) * k_gaussianFactors[uOffset];
+        }
+        pStart = pActivationLevelsPerCol + uCenterY;
+        for (u16fast uOffset = uOffsetsBefore; uOffset < 15u; uOffset++) {
+            uSum += uint32(pStart[(uOffset - uOffsetsBefore)*VANILLA_HTM_SHEET_HEIGHT]) * k_gaussianFactors[uOffset];
+        }
+    } else {
+        const ActivationLevelType* pStart = pActivationLevelsPerCol + ((uCenterX + 1u) << VANILLA_HTM_SHEET_SHIFT_DIVY) + uCenterY;
+        for (u16fast uOffset = 0u; uOffset < 15u; uOffset++) {
+            uSum += uint32(pStart[uOffset*VANILLA_HTM_SHEET_HEIGHT]) * k_gaussianFactors[uOffset];
+        }
+    }
+    return uSum;
+}
+; // template termination
+*/
 
 // - - - - - - - - - - - - - - - - - - - -
 // computes a gaussian filter over a 31x31 kernel, using the well known two-passes optimization (one for each dimension)
@@ -910,23 +1029,52 @@ static void _computeGaussian(const ActivationLevelType* pActivationLevelsPerCol,
     uint32* pOutputMinActivation)
 {
     const ActivationLevelType* pCurrentActivation = pActivationLevelsPerCol;
+    // sum of gaussian factors is 4095 => shift by 12 nominally, or shift by 4 for first round of y
+    //   for when ActivationLevelType is 16b (=> "raw") so as to simulate boosted-by-1.0 (towards fixed pt 8b after point)
+    static const u16fast uShiftFirst = (sizeof(ActivationLevelType) == 2u) ? 4u : 12u;
+    for (u16fast uX = 0u; uX < VANILLA_HTM_SHEET_WIDTH; uX++) {
+        uint32* pCurrentOut = pOutY + uX;
+        for (u16fast uY = 0u; uY < VANILLA_HTM_SHEET_HEIGHT; uY++, pCurrentActivation++) {
+            uint32 uCurrentSum = uint32(*pCurrentActivation) * k_uFactorForCenter;
+            uCurrentSum += _getGaussianSumRev<ActivationLevelType>(pActivationLevelsPerCol, uX, uY, VANILLA_HTM_SHEET_HEIGHT);
+            uCurrentSum += _getGaussianSumFwd<ActivationLevelType>(pActivationLevelsPerCol, uX, uY, VANILLA_HTM_SHEET_HEIGHT);
+            uint32 uValue = uCurrentSum >> uShiftFirst;
+            *pCurrentOut = uValue;
+            pCurrentOut += VANILLA_HTM_SHEET_WIDTH;
+        }
+    }
+    const uint32* pCurrentY = pOutY;
+    uint32* pCurrentMin = pOutputMinActivation;
+    for (u16fast uY = 0u; uY < VANILLA_HTM_SHEET_HEIGHT; uY++) {
+        uint32* pCurrentOut = pOutFinal + uY;
+        uint32* pCurrentMin = pOutputMinActivation;
+        if (bOutputMinActivation)
+            pCurrentMin += uY;
+        for (u16fast uX = 0u; uX < VANILLA_HTM_SHEET_WIDTH; uX++, pCurrentY++) {
+            uint32 uCurrentSum = (*pCurrentY) * k_uFactorForCenter;
+            uCurrentSum += _getGaussianSumRev<uint32>(pOutY, uY, uX, VANILLA_HTM_SHEET_WIDTH);
+            uCurrentSum += _getGaussianSumFwd<uint32>(pOutY, uY, uX, VANILLA_HTM_SHEET_WIDTH);
+            uint32 uValue = uCurrentSum >> 12u;
+            *pCurrentOut = uValue;
+            pCurrentOut += VANILLA_HTM_SHEET_HEIGHT;
+            if (bOutputMinActivation) {
+                *pCurrentMin += uValue;
+                pCurrentMin += VANILLA_HTM_SHEET_HEIGHT;
+            }
+        }
+    }
+
+    /*
+    const ActivationLevelType* pCurrentActivation = pActivationLevelsPerCol;
     uint32* pCurrentOut = pOutY;
     // sum of gaussian factors is 4095 => shift by 12 nominally, or shift by 4 for first round of y
     //   for when ActivationLevelType is 16b (=> "raw") so as to simulate boosted-by-1.0 (towards fixed pt 8b after point)
     static const u16fast uShiftFirst = (sizeof(ActivationLevelType) == 2u) ? 4u : 12u;
     for (u16fast uX = 0u; uX < VANILLA_HTM_SHEET_WIDTH; uX++) {
-        u16fast uY = 0u;
-        for (; uY < VANILLA_HTM_SHEET_HALFHEIGHT; uY++, pCurrentActivation++, pCurrentOut++) {
+        for (u16fast uY = 0u; uY < VANILLA_HTM_SHEET_HEIGHT; uY++, pCurrentActivation++, pCurrentOut++) {
             uint32 uCurrentSum = uint32(*pCurrentActivation) * k_uFactorForCenter;
-            uCurrentSum += _getGaussianSum<ActivationLevelType, true, true, true>(pActivationLevelsPerCol, uX, uY);
-            uCurrentSum += _getGaussianSum<ActivationLevelType, true, false, false>(pActivationLevelsPerCol, uX, uY);
-            uint32 uValue = uCurrentSum >> uShiftFirst;
-            *pCurrentOut = uValue;
-        }
-        for (; uY < VANILLA_HTM_SHEET_HEIGHT; uY++, pCurrentActivation++, pCurrentOut++) {
-            uint32 uCurrentSum = uint32(*pCurrentActivation) * k_uFactorForCenter;
-            uCurrentSum += _getGaussianSum<ActivationLevelType, true, true, false>(pActivationLevelsPerCol, uX, uY);
-            uCurrentSum += _getGaussianSum<ActivationLevelType, true, false, true>(pActivationLevelsPerCol, uX, uY);
+            uCurrentSum += _getGaussianSumYrev<ActivationLevelType>(pActivationLevelsPerCol, uX, uY);
+            uCurrentSum += _getGaussianSumY<ActivationLevelType>(pActivationLevelsPerCol, uX, uY);
             uint32 uValue = uCurrentSum >> uShiftFirst;
             *pCurrentOut = uValue;
         }
@@ -934,12 +1082,11 @@ static void _computeGaussian(const ActivationLevelType* pActivationLevelsPerCol,
     const uint32* pCurrentY = pOutY;
     uint32* pCurrentMin = pOutputMinActivation;
     pCurrentOut = pOutFinal;
-    u16fast uX = 0u;
-    for (; uX < VANILLA_HTM_SHEET_HALFWIDTH; uX++) {
+    for (u16fast uX = 0u; uX < VANILLA_HTM_SHEET_WIDTH; uX++) {
         for (u16fast uY = 0u; uY < VANILLA_HTM_SHEET_HEIGHT; uY++, pCurrentY++, pCurrentOut++) {
             uint32 uCurrentSum = (*pCurrentY) * k_uFactorForCenter;
-            uCurrentSum += _getGaussianSum<uint32, false, true, true>(pOutY, uX, uY);
-            uCurrentSum += _getGaussianSum<uint32, false, false, false>(pOutY, uX, uY);
+            uCurrentSum += _getGaussianSumXrev<uint32>(pOutY, uX, uY);
+            uCurrentSum += _getGaussianSumX<uint32>(pOutY, uX, uY);
             uint32 uValue = uCurrentSum >> 12u;
             *pCurrentOut = uValue;
             if (bOutputMinActivation) {
@@ -948,19 +1095,7 @@ static void _computeGaussian(const ActivationLevelType* pActivationLevelsPerCol,
             }
         }
     }
-    for (; uX < VANILLA_HTM_SHEET_WIDTH; uX++) {
-        for (u16fast uY = 0u; uY < VANILLA_HTM_SHEET_HEIGHT; uY++, pCurrentY++, pCurrentOut++) {
-            uint32 uCurrentSum = (*pCurrentY) * k_uFactorForCenter;
-            uCurrentSum += _getGaussianSum<uint32, false, true, false>(pOutY, uX, uY);
-            uCurrentSum += _getGaussianSum<uint32, false, false, true>(pOutY, uX, uY);
-            uint32 uValue = uCurrentSum >> 12u;
-            *pCurrentOut = uValue;
-            if (bOutputMinActivation) {
-                *pCurrentMin += uValue;
-                pCurrentMin++;
-            }
-        }
-    }
+    */
 }
 ; // template termination
 
