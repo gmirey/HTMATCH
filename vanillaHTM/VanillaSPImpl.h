@@ -269,14 +269,14 @@ template<bool bCareForXWrap, bool bCareForYWrap>
 static float _getMaxFromRange(u16fast uStartX, u16fast uSizeX, u16fast uStartY, u16fast uSizeY, const float* pColumnMajorFloatValues) {
     u16fast uEndX = uStartX + uSizeX;
     if (bCareForXWrap && uEndX > VANILLA_HTM_SHEET_WIDTH) {
-        float fToMaxX = _getSumFromRange<false, bCareForYWrap>(uStartX, VANILLA_HTM_SHEET_WIDTH-uStartX, uStartY, uSizeY, pColumnMajorFloatValues);
-        float fWrappedInX = _getSumFromRange<false, bCareForYWrap>(0u, uEndX-VANILLA_HTM_SHEET_WIDTH, uStartY, uSizeY, pColumnMajorFloatValues);
+        float fToMaxX = _getMaxFromRange<false, bCareForYWrap>(uStartX, VANILLA_HTM_SHEET_WIDTH-uStartX, uStartY, uSizeY, pColumnMajorFloatValues);
+        float fWrappedInX = _getMaxFromRange<false, bCareForYWrap>(0u, uEndX-VANILLA_HTM_SHEET_WIDTH, uStartY, uSizeY, pColumnMajorFloatValues);
         return std::max(fToMaxX, fWrappedInX);
     } else {
         u16fast uEndY = uStartY + uSizeY;
         if (bCareForYWrap && uEndY > VANILLA_HTM_SHEET_HEIGHT) {
-            float fToMaxY = _getSumFromRange<false, false>(uStartX, uSizeX, uStartY, VANILLA_HTM_SHEET_HEIGHT-uStartY, pColumnMajorFloatValues);
-            float fWrappedInY = _getSumFromRange<false, false>(uStartX, uSizeX, 0u, uEndY-VANILLA_HTM_SHEET_HEIGHT, pColumnMajorFloatValues);
+            float fToMaxY = _getMaxFromRange<false, false>(uStartX, uSizeX, uStartY, VANILLA_HTM_SHEET_HEIGHT-uStartY, pColumnMajorFloatValues);
+            float fWrappedInY = _getMaxFromRange<false, false>(uStartX, uSizeX, 0u, uEndY-VANILLA_HTM_SHEET_HEIGHT, pColumnMajorFloatValues);
             return std::max(fToMaxY, fWrappedInY);
         } else {
             float fMaxFound = 0.0f;
@@ -1138,8 +1138,9 @@ static u16fast _reduceByAmountScaled(const uint32* pStartLevelsPerCol, const uin
         uIndex++, pCurrentActivation++, pCurrentReduction++, pCurrentResult++) {
         int32 iReduction = (int32(uScale8bAfterPoint) * int32(*pCurrentReduction)) >> 8;
         int32 iReduced = int32(*pCurrentActivation) - iReduction;
+        // not calling 'unbranchingClampLowToZero' here since we reuse the 'iMaskIfNonNeg' thing for the non-zero counter
         int32 iMaskIfNonNeg = ~(iReduced >> 31);
-        *pCurrentResult = iMaskIfNonNeg & iReduced;
+        *pCurrentResult = uint32(iMaskIfNonNeg & iReduced);
         uNonZeroCount += u16fast(iMaskIfNonNeg & 1u);
     }
     return uNonZeroCount;

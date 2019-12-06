@@ -15,7 +15,7 @@ Already available:
 -
 
 - Optimized version of HTM Spatial Pooler
-* * should work best when compiled for x64 targets, with either MSVC or GCC
+* * should work best when compiled for x64 targets, with either MSVC or GCC (requires c++17)
 * * perf reports to be found at https://discourse.numenta.org/t/topologies-in-the-brain-and-how-to-model-them/6783/15
 * * code is a little heavy on preprocessor macros at this point, having devised this scheme allowing to select a particular version and run tests against it. Tried my best to make this hopefully manageable enough.
 

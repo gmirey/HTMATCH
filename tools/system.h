@@ -63,9 +63,10 @@ namespace HTMATCH {
 #  error "uncommon architecture detected - HTMATCH cannot recover"
 #endif
     // To the contrary...
-    // We're unsure why the choice of 'char' for the 'int_fast8_t' definition in, eg., MSVC library... in the event that it stemmed
-    //   from same aliasing concerns as expressed above, then the following macro definition will force it to use next-size-fastest,
-    //   that is, int_fast16_t, which for MSVC library turns out to be 32b (and seems to make more sense for most known processors)
+    // We're unsure why the choice of 'char' for the 'int_fast8_t' definition in, eg., MSVC library... in the event that it
+    //   stemmed from same aliasing concerns as expressed above, then the following macro definition will force it to use
+    //   next-size-fastest, that is, int_fast16_t, which for MSVC library turns out to be 32b (and seems to make more sense for
+    //   most known processors)
     // YMMV here... => you can experiment with disabling this macro at will...
     #define HTMATCH_COERCE_FAST8_TO_FAST16
 
@@ -73,11 +74,11 @@ namespace HTMATCH {
     // * It is recommended that you care about the range of your integer values, and thus the necessary bit sizes to carry them.
     // * prefer using fixed-size in your structure definitions
     // * consider using fastest-for-size versions in your function parameters and temporary variables
-    // * when converting an algorithm from fixed-size to fastest-for-size, do not forget to mask out the heading bits if there is
-    //   the possibility that some fixed-size cast would have been used for implicit masking in the original.
-    // * possibly consider refraining from converting everything to fastest-for-size, however... maybe it could impair your compiler
-    //   chances to detect and use vectorization optimizations? to investigate... Most fastest-for-size however would solve to 32b,
-    //   so even if you use fastest-for-size all over the place, there's still room for 8x32b vectors with AVX.
+    // * when converting an algorithm from fixed-size to fastest-for-size, do not forget to mask out the heading bits if there
+    //   is the possibility that some fixed-size cast would have been used for implicit masking in the original.
+    // * possibly consider refraining from converting everything to fastest-for-size, however... maybe it could impair your
+    //   compiler chances to detect and use vectorization optimizations? to investigate... (Most fastest-for-size however would
+    //   solve to 32b, so even if you use fastest-for-size all over the place, there's still room for 8x32b vectors with AVX)
 
     // Fixed-size integers
 
