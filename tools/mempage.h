@@ -62,26 +62,26 @@ namespace HTMATCH {
         }
         FORCE_INLINE uint32 getAllocatedCount() const FORCE_INLINE_END { return _uAllocatedCount; }
         FORCE_INLINE bool isEmpty() const FORCE_INLINE_END { return _uAllocatedCount == 0u; }
-        FORCE_INLINE static constexpr size_t getOffsetFor(u32fast uIndex, u32fast uByteSize) FORCE_INLINE_END {
-            return size_t(uIndex) * size_t(uByteSize);
+        FORCE_INLINE static constexpr size_t getOffsetFor(u32fast uIndex, u32fast uSlotByteSize) FORCE_INLINE_END {
+            return size_t(uIndex) * size_t(uSlotByteSize);
         }
-        FORCE_INLINE static constexpr u32fast getMaxQwordsFor(u32fast uByteSize, u32fast uMaxCount) FORCE_INLINE_END {
-            u32fast uTotalByteCount = uByteSize * uMaxCount;
+        FORCE_INLINE static constexpr u32fast getMaxQwordsFor(u32fast uSlotByteSize, u32fast uMaxCount) FORCE_INLINE_END {
+            u32fast uTotalByteCount = uSlotByteSize * uMaxCount;
             return reqCountCoarseTo(uTotalByteCount, 6u);
         }
-        FORCE_INLINE uint8* getDataFor(u32fast uIndex, u32fast uByteSize) FORCE_INLINE_END {
-            return _pData + getOffsetFor(uIndex, uByteSize);
+        FORCE_INLINE uint8* getDataFor(u32fast uIndex, u32fast uSlotByteSize) FORCE_INLINE_END {
+            return _pData + getOffsetFor(uIndex, uSlotByteSize);
         }
-        FORCE_INLINE const uint8* getDataFor(u32fast uIndex, u32fast uByteSize) const FORCE_INLINE_END {
-            return _pData + getOffsetFor(uIndex, uByteSize);
+        FORCE_INLINE const uint8* getDataFor(u32fast uIndex, u32fast uSlotByteSize) const FORCE_INLINE_END {
+            return _pData + getOffsetFor(uIndex, uSlotByteSize);
         }
-        uint8* allocateNewSlot(u32fast uByteSize, u32fast uMaxCount, u32fast* outIndex) {
-            if (_uAllocatedCount >= uMaxCount) {
+        uint8* allocateNewSlot(u32fast uSlotByteSize, u32fast uMaxSlotCount, u32fast* outIndex) {
+            if (_uAllocatedCount >= uMaxSlotCount) {
                 return 0;
             }
             u32fast uIndex = u32fast(_uNextIndex);
             *outIndex = uIndex;
-            uint8* pResult = _pData + getOffsetFor(uIndex, uByteSize);
+            uint8* pResult = _pData + getOffsetFor(uIndex, uSlotByteSize);
             u32fast uQword = uIndex >> 6u;
             u32fast uBit = uIndex & 0x0000003Fu;
             uint64 uMask = 1uLL << uBit;
@@ -91,7 +91,7 @@ namespace HTMATCH {
             }
             uField &= ~uMask;
             if (uField == 0uLL) {
-                u32fast uMaxQwords = getMaxQwordsFor(uByteSize, uMaxCount);
+                u32fast uMaxQwords = getMaxQwordsFor(uSlotByteSize, uMaxSlotCount);
                 do {
                     uQword++;
                     uField = _pAvailabilityField[uQword];
@@ -141,31 +141,31 @@ namespace HTMATCH {
     //   In effect a simple wrapper around MemPageBase
     // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     class DefaultMemPage {
-        DefaultMemPage(u32fast uCount, u32fast uByteSize, u8fast uAlignBits = 0u):
-            _impl(uCount, uByteSize, uAlignBits),
-            _uMaxCount(uCount), _uByteSize(uByteSize) {}
+        DefaultMemPage(u32fast uSlotCount, u32fast uSlotByteSize, u8fast uAlignBits = 0u):
+            _impl(uSlotCount, uSlotByteSize, uAlignBits),
+            _uMaxSlotCount(uSlotCount), _uSlotByteSize(uSlotByteSize) {}
         ~DefaultMemPage() {}
         FORCE_INLINE uint32 getAllocatedCount() const FORCE_INLINE_END { return _impl.getAllocatedCount(); }
         FORCE_INLINE bool isEmpty() const FORCE_INLINE_END { return _impl.isEmpty(); }
-        FORCE_INLINE uint32 getMaxCount() const FORCE_INLINE_END { return _uMaxCount; }
-        FORCE_INLINE uint32 getByteSize() const FORCE_INLINE_END { return _uByteSize; }
-        FORCE_INLINE bool isFull() const FORCE_INLINE_END { return _impl.getAllocatedCount() >= _uMaxCount; }
+        FORCE_INLINE uint32 getMaxCount() const FORCE_INLINE_END { return _uMaxSlotCount; }
+        FORCE_INLINE uint32 getByteSize() const FORCE_INLINE_END { return _uSlotByteSize; }
+        FORCE_INLINE bool isFull() const FORCE_INLINE_END { return _impl.getAllocatedCount() >= _uMaxSlotCount; }
         FORCE_INLINE uint8* getDataFor(u32fast uIndex) FORCE_INLINE_END {
-            return _impl.getDataFor(uIndex, u32fast(_uByteSize));
+            return _impl.getDataFor(uIndex, u32fast(_uSlotByteSize));
         }
         FORCE_INLINE const uint8* getDataFor(u32fast uIndex) const FORCE_INLINE_END {
-            return _impl.getDataFor(uIndex, u32fast(_uByteSize));
+            return _impl.getDataFor(uIndex, u32fast(_uSlotByteSize));
         }
         FORCE_INLINE uint8* allocateNewSlot(u32fast* outIndex) FORCE_INLINE_END {
-            return _impl.allocateNewSlot(u32fast(_uByteSize), u32fast(_uMaxCount), outIndex);
+            return _impl.allocateNewSlot(u32fast(_uSlotByteSize), u32fast(_uMaxSlotCount), outIndex);
         }
         FORCE_INLINE bool removeSlot(u32fast uIndex) FORCE_INLINE_END {
             return _impl.removeSlot(uIndex);
         }
     private:
         MemPageBase _impl;
-        uint32 _uMaxCount;
-        uint32 _uByteSize;
+        uint32 _uMaxSlotCount;
+        uint32 _uSlotByteSize;
     };
 
     // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -

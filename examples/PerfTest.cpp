@@ -283,15 +283,15 @@ static void _reportPerfTest(const FixedDigitEncoder& inputEncoder, size_t uThous
         "Global inhib, noboost",                                                    // 1
         "Bucket inhib, noboost",                                                    // 2
         "Local inhib, noboost",                                                     // 3
-        "Global inhib, boost 0.1",                                                  // 4
-        "Bucket inhib, boost 0.1",                                                  // 5
-        "Local inhib, boost 0.1",                                                   // 6
-        "Local inhib, boost 0.1, correct dynamic radius",                           // 7
-        "Local inhib, boost 0.1, no radius update",                                 // 8
-        "Local inhib, boost 0.1, optimized neighbor sampling",                      // 9
-        "Local inhib, boost 0.1, gaussian filter test",                             // 10
-        "Local inhib, boost 0.1, gaussian filter + 1-winner over 7x7",              // 11
-        "Local inhib, boost 0.1, gaussian filter + enforced spacing 6.5",           // 12
+        "Global inhib, with boosting",                                              // 4
+        "Bucket inhib, with boosting",                                              // 5
+        "Local inhib, with boosting",                                               // 6
+        "Local inhib, with boosting, correct dynamic radius",                       // 7
+        "Local inhib, with boosting, no radius update",                             // 8
+        "Local inhib, with boosting, optimized neighbor sampling",                  // 9
+        "Local inhib, with boosting, gaussian filter test",                         // 10
+        "Local inhib, with boosting, gaussian filter + 1-winner over 7x7",          // 11
+        "Local inhib, with boosting, gaussian filter + enforced spacing 6.5",       // 12
     };
     static const char* tSynapseKindTitles[4u] = {
         "<unknown>",

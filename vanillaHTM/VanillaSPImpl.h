@@ -666,8 +666,42 @@ static float _computeCorrectedAvgConnectedSpanFor(u16fast uX, u16fast uY, u16fas
 // - - - - - - - - - - - - - - - - - - - -
 static uint16 _getBoostFactorUint16(float fTargetActiveRatio, float fCurrentActivRatio)
 {
+    // piecewise linear boost computation method
+    //
+
+#if defined(VANILLA_SP_USE_BOOSTING)
+#  if (VANILLA_SP_DEFAULT_BOOSTING_MAX == VANILLA_SP_DEFAULT_BOOSTING_MIN)
+        return VANILLA_SP_DEFAULT_BOOSTING_MAX;
+#  else
+        if (fCurrentActivRatio < fTargetActiveRatio) {
+            // below target, we'll get a higher boost value (=> higher than 256 which, .8b, represents '1.0')
+            float fActivFloor = VANILLA_SP_DEFAULT_BOOSTING_LOWERFACTOR * fTargetActiveRatio;
+            if (fCurrentActivRatio < fActivFloor) {
+                return VANILLA_SP_DEFAULT_BOOSTING_MAX;
+            } else {
+                float fLerpParam = (fTargetActiveRatio - fCurrentActivRatio) / (fTargetActiveRatio - fActivFloor);
+                return uint16(std::round(256.0 + fLerpParam * float(VANILLA_SP_DEFAULT_BOOSTING_MAX - 256u)));
+            }
+        } else {
+            // above target, we'll get a lower boost value (=> lower than 256 which, .8b, represents '1.0')
+            float fActivCeiling = VANILLA_SP_DEFAULT_BOOSTING_UPPERFACTOR * fTargetActiveRatio;
+            if (fCurrentActivRatio < fActivCeiling) {
+                float fLerpParam = (fCurrentActivRatio - fTargetActiveRatio) / (fActivCeiling - fTargetActiveRatio);
+                return uint16(std::round(256.0 - fLerpParam * float(256u - VANILLA_SP_DEFAULT_BOOSTING_MIN)));
+            } else {
+                return VANILLA_SP_DEFAULT_BOOSTING_MIN;
+            }
+        }
+#  endif
+#else
+    return 256u;
+#endif
+
+    // Old formulas, now replaced by the piecewise linear method which is now-standard for HTMATCH
+    //
+
     // LINEAR boost
-    // see rationale for the linear boost function at
+    // see rationale for the linear boost function, resulting from @marty1885 investigations, at
     // https://discourse.numenta.org/t/mapping-the-hyper-parameter-space-of-classifcation-using-sp/6815/5
     //float fArg = (fTargetActiveRatio - fCurrentActivRatio) * VANILLA_SP_USE_BOOSTING;
     //float fBoostFactor = 1.0f + fArg;
@@ -681,12 +715,12 @@ static uint16 _getBoostFactorUint16(float fTargetActiveRatio, float fCurrentActi
     //float fBoostFactor = std::exp(fArg);
 
     // LOG boost
-    fCurrentActivRatio = std::max(fCurrentActivRatio, fTargetActiveRatio * (1.0f/128.0f));
-    float fArg = std::min(32.0f, fCurrentActivRatio / fTargetActiveRatio);
-    float fBoostFactor = 1.0f - (std::log(fArg) / 4.0f);
+    //fCurrentActivRatio = std::max(fCurrentActivRatio, fTargetActiveRatio * (1.0f/128.0f));
+    //float fArg = std::min(32.0f, fCurrentActivRatio / fTargetActiveRatio);
+    //float fBoostFactor = 1.0f - (std::log(fArg) / 4.0f);
 
     // Boost factor is here a 16b fixed point, with 8b after dot (=> 256 represents 1.0)
-    return uint16(std::round(fBoostFactor * 256.0f));
+    //return uint16(std::round(fBoostFactor * 256.0f));
 }
 #endif
 

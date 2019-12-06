@@ -112,8 +112,8 @@
 // Some limits for vanilla SP
 
 #define VANILLA_SP_MAX_WINNERS                   256u      // Enough to consider up to 8% SP density even with global inhib on.
-#define VANILLA_SP_MAX_SYNAPSES_PER_SEG          4096u     // Enough for each column able to connect to up to 50% pre-synaptic
-                                                           //   cells from a full, 4-deep input-sheet
+#define VANILLA_SP_MAX_SYNAPSES_PER_SEG          2047u     // Enough for each column to be able to connect to more than 50%
+                                                           //   pre-synaptic cells from 6-deep input-sheet, with default 12 radius
 
 // Some defaults for vanilla SP 
 
@@ -127,9 +127,18 @@
 #define VANILLA_SP_DEFAULT_INTEGRATION_WINDOW    1000uLL   // Integration window for moving averages of column activity
 #define VANILLA_SP_DEFAULT_SEED                  0u        // No seed override by default (will have default seed of 'Rand')
 
+// Default boosting values using the piecewise linear method which is now-standard for HTMATCH
+
+#define VANILLA_SP_DEFAULT_BOOSTING_LOWERFACTOR     0.25f   // below this factor of target, max boost is applied
+#define VANILLA_SP_DEFAULT_BOOSTING_UPPERFACTOR     2.5f    // above this factor of target, min boost is applied
+#define VANILLA_SP_DEFAULT_BOOSTING_MAX             1024u   // .8b => 4.0
+#define VANILLA_SP_DEFAULT_BOOSTING_MIN               64u   // .8b => 0.25
+
 // Miscellaneous
 
-#define VANILLA_SP_BOOSTING_VALUE_SWEET                 0.98f // cf. results from @marty1885
+#define VANILLA_SP_BUCKET_SIDE       16u  // Side size of buckets in bucket neighborhood mode (=> 16x16 squares)
+#define VANILLA_SP_LOCAL_RADIUS      9u   // Fixed size of neighboring radius in local neighborhood mode (=> 19x19 kernels)
+#define VANILLA_SP_GAUSS_RADIUS      15u  // Fixed size of radius in gaussian local neighborhood mode (=> 31x31 kernels)
 
 #define VANILLA_SP_LOCAL_INHIB_TYPE_NOMINAL             1    // local inhibition is centered on currently considered column
 #define VANILLA_SP_LOCAL_INHIB_TYPE_BUCKET              2    // local inhibition is in fact setup as fixed, separated "buckets"

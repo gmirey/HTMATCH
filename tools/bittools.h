@@ -313,7 +313,8 @@ namespace HTMATCH {
 
     // transforms a tight-packed XY in a single 32b integer to an expanded XY (still in a single 32b integer),
     //   according to the pack/expand template parameters **if it can be performed in a single mul-and-mask**
-    // eg: expandXY<3u,3u,0u,16u> would convert an upackedvalue of the binary form (lsb shown to the right):
+    //   (otherwise static assert would fire)
+    // eg: expandXY<3u,3u,0u,16u> would convert a packed value of the binary form (lsb shown to the right):
     //    0000 0000 0000 0000 0000 0000 00yy yxxx
     // to a result of the binary form:
     //    0000 0000 0000 0yyy 0000 0000 0000 0xxx
@@ -337,7 +338,7 @@ namespace HTMATCH {
     // transforms a tight-packed XYZ in a single 32b integer to an expanded XYZ (still in a single 32b integer),
     //   according to the pack/expand template parameters **if it can be performed in a single mul-and-mask**
     //   (otherwise static assert would fire)
-    // eg: expandXYZ<3u,3u,2u,0u,13u,26u> would convert an upackedvalue of the binary form (lsb shown to the right):
+    // eg: expandXYZ<3u,3u,2u,0u,13u,26u> would convert a packed value of the binary form (lsb shown to the right):
     //    0000 0000 0000 0000 0000 0000 zzyy yxxx
     // to a result of the binary form:
     //    0000 zz00 0000 0000 yyy0 0000 0000 0xxx
