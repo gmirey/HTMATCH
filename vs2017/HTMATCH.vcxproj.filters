@@ -77,5 +77,8 @@
     <ClInclude Include="..\common\AxonalExpansion.h">
       <Filter>Header Files\common</Filter>
     </ClInclude>
+    <ClInclude Include="VanillaSP2.h">
+      <Filter>Header Files\vanillaHTM</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

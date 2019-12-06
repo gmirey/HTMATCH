@@ -103,7 +103,115 @@ namespace HTMATCH {
 // Other useful macros
 //
 
-#define HTMATCH_unused(param) do { (void)sizeof(param); } while(0)
+#define HTMATCH_unused(_param) do { (void)sizeof(_param); } while(0)
+
+
+// Alignment concerns
+//
+
+#if defined(_MSC_VER) // for some reason... *sigh*
+#  include "malloc.h"
+#  define HTMATCH_aligned_alloc(alignment, size)    ::_aligned_malloc(size, alignment)
+#  define HTMATCH_aligned_free(ptr)                 ::_aligned_free(ptr)
+#else
+#  define HTMATCH_aligned_alloc(alignment, size)    std::aligned_alloc(alignment, size)
+#  define HTMATCH_aligned_free(ptr)                 std::free(ptr)
+#endif
+
+
+// type-punning concerns, and macro
+// for an explanation of what's at stake here, see "What is Strict Aliasing and Why do we Care?" article
+// https://gist.github.com/shafik/848ae25ee209f698763cffee272a58f8
+//
+// declaring the following macros:
+//   HTMATCH_tpunptr(_aliasingType, _aliasingVar, _aliasedType, _aliasedVar, _byteSize)
+//   HTMATCH_tpunval(_aliasingType, _aliasingVar, _aliasedType, _aliasedVar)
+//
+
+// Disabled: not yet ready or sufficiently tested
+// Note: in the meantime, HTMATCH widespread usage of uint8 buffers should be safe regarding those aliasing issues anyway
+
+/*
+
+// You may uncomment 0 or one from the following at will
+#define HTMATCH_USE_UNION_FOR_TYPE_PUNNING
+//#define HTMATCH_USE_MEMCPY_FOR_TYPE_PUNNING
+
+// You may uncomment this one at will; will force a safe choice if neither of the above was defined yet
+//#define HTMATCH_PREFER_SAFE_FOR_TYPE_PUNNING
+
+#if !defined(HTMATCH_USE_UNION_FOR_TYPE_PUNNING) && !defined(HTMATCH_USE_MEMCPY_FOR_TYPE_PUNNING)
+#  if defined(__GNUC__)
+#    define HTMATCH_USE_UNION_FOR_TYPE_PUNNING
+#  elif defined(HTMATCH_PREFER_SAFE_FOR_TYPE_PUNNING)
+#    define HTMATCH_USE_MEMCPY_FOR_TYPE_PUNNING
+#  endif
+#endif
+
+#if   defined(HTMATCH_USE_UNION_FOR_TYPE_PUNNING)
+
+// type-punning macros
+// plain C way of going through an union, ensured safe for C++ also by gcc spec. although not safe-by-'C++'-standard
+//   clang compiler seems to behave identically to gcc in that regard
+//   as of 2019, seems also best-way for MSVC (... or totally broken, need to investigate further)
+
+#  define HTMATCH_tpunptr(_aliasingType, _aliasingValue, _aliasedType, _aliasedValue, _byteSize) do { \
+    static_assert(sizeof(_aliasingType) <= alignof(_aliasedValue)); \
+    struct { \
+        _aliasedType*  _orig; \
+        _aliasingType* _aliased; \
+    } _aliasingUnion; \
+    _aliasingUnion._orig = _aliasedValue; \
+    _aliasingValue = _aliasingUnion._aliased; \
+} while(0)
+#  define HTMATCH_tpunval(_aliasingType, _aliasingValue, _aliasedType, _aliasedValue) do { \
+    static_assert(sizeof(_aliasingType) == sizeof(_aliasedType)); \
+    struct { \
+        _aliasedType  _orig; \
+        _aliasingType _aliased; \
+    } _aliasingUnion; \
+    _aliasingUnion._orig = _aliasedValue; \
+    _aliasingValue = _aliasingUnion._aliased; \
+} while(0)
+
+#elif defined(HTMATCH_USE_MEMCPY_FOR_TYPE_PUNNING)
+
+// type-punning macros
+// safe way using 'memcpy', totally defeating the purpose of a type-punning "optim" in the first place, BUT
+//   hopefully detectable and optimizable-away by a good compiler.
+//   as of 2019:
+//     gcc -O2 is able to emit exact same code with memcpy as with the other two methods, at least for HTMATCH_tpunval
+//     MSVC /O2 is able to optimize the call away at least for HTMATCH_tpunval, although still seems bloated.
+
+#  define HTMATCH_tpunptr(_aliasingType, _aliasingValue, _aliasedType, _aliasedValue, _byteSize) do { \
+    static_assert(sizeof(_aliasingType) <= alignof(_aliasedValue)); \
+    std::memcpy(_aliasingValue, _aliasedType, _byteSize); \
+} while(0)
+
+#  define HTMATCH_tpunval(_aliasingType, _aliasingValue, _aliasedType, _aliasedValue) do { \
+    static_assert(sizeof(_aliasingType) == sizeof(_aliasedType)); \
+    std::memcpy(&_aliasingValue, &_aliasedType, sizeof(_aliasedType)); \
+} while(0)
+
+#else
+
+// type-punning macros
+//   simple way using pointer aliasing, although not safe-by-standard.
+//   plainly understandable in intent, though, and should(?) be safe in debug mode.
+
+#  define HTMATCH_tpunptr(_aliasingType, _aliasingValue, _aliasedType, _aliasedValue, _byteSize) do { \
+    static_assert(sizeof(_aliasingType) <= alignof(_aliasedValue)); \
+    _aliasingValue = reinterpret_cast<_aliasingType*>(_aliasedValue); \
+} while(0)
+
+#  define HTMATCH_tpunval(_aliasingType, _aliasingValue, _aliasedType, _aliasedValue) do { \
+    static_assert(sizeof(_aliasingType) == sizeof(_aliasedType)); \
+    _aliasingValue = *reinterpret_cast<_aliasingType*>(&(_aliasedValue)); \
+} while(0)
+
+#endif
+
+*/
 
 #endif // _HTMATCH_SYSTEM_H
 

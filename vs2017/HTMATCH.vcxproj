@@ -37,6 +37,7 @@
     <ClInclude Include="..\vanillaHTM\VanillaSP.h" />
     <ClInclude Include="..\vanillaHTM\VanillaSPGen.h" />
     <ClInclude Include="..\vanillaHTM\VanillaSPImpl.h" />
+    <ClInclude Include="VanillaSP2.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>

@@ -28,14 +28,14 @@
 #include "tools/parallel.h"
 #include <vector>
 
-#define AXONAL_ARBOUR_SIZE_BUCKET_COUNT                     33u         // [1..16] then [18..32] step 2 then [36..64] step 4 then 70
+#define AXONAL_ARBOUR_SIZE_BUCKET_COUNT                     33u         // [1..16] then [18..32] step 2 then [36..64] step 4 then 72
 #define AXONAL_ARBOUR_MAX_PAGES_PER_SIZE_BUCKET             512u        // 9b page index in bucket
 #define AXONAL_ARBOUR_MAX_ARBORS_PER_PAGE                   65536u      // 16b index in page
-#define AXONAL_ARBOUR_BYTES_PER_FIRST_EXPANSION_COUNT       35u         // 16b + 8b + (16 x 16b), in bytes
+#define AXONAL_ARBOUR_BYTES_PER_FIRST_EXPANSION_COUNT       36u         // 32b + (16 x 16b), in bytes
 #define AXONAL_ARBOUR_LINE_SIZE                             64u         // standard cache line of 64 bytes
 #define AXONAL_ARBOUR_LINE_SHIFT                            6u          // 64 is 2^6
 #define AXONAL_ARBOUR_MAX_FIRST_EXPANSION_COUNT             128u        // how many shunting areas can a single arbor ignite
-#define AXONAL_ARBOUR_MAX_LINES                             70u         // (128 * AXONAL_ARBOUR_BYTES_PER_FIRST_EXPANSION_COUNT) / 64
+#define AXONAL_ARBOUR_MAX_LINES                             72u         // (128 * AXONAL_ARBOUR_BYTES_PER_FIRST_EXPANSION_COUNT) / 64
 
 namespace HTMATCH {
 
@@ -132,7 +132,7 @@ namespace HTMATCH {
                                                    9u, 10u, 11u, 12u, 13u, 14u, 15u, 16u,
                                                   18u, 20u, 22u, 24u, 26u, 28u, 30u, 32u,
                                                   36u, 40u, 44u, 48u, 52u, 56u, 60u, 64u,
-                                                  70u
+                                                  AXONAL_ARBOUR_MAX_LINES
                                                 };
             return u32fast(tPossibleResults[uBucket]);
         }
@@ -147,9 +147,9 @@ namespace HTMATCH {
                                                   26u, 26u, 26u, 26u, 27u, 27u, 27u, 27u,
                                                   28u, 28u, 28u, 28u, 29u, 29u, 29u, 29u,
                                                   30u, 30u, 30u, 30u, 31u, 31u, 31u, 31u,
-                                                  32u, 32u, 32u, 32u, 32u, 32u
+                                                  32u, 32u, 32u, 32u, 32u, 32u, 32u, 32u,
                                                 };
-            return u32fast(tPossibleResults[uMinLineCount-1u]); // -1 as result for size 0 is not present in the table
+            return u32fast(tPossibleResults[uMinLineCount-1u]); // -1 since result for size 0 is not present in the table
         }
 
         static void _getBucketAndByteSizeFor(u32fast uFirstExpansionCount, u32fast* outBucket, u32fast* outByteSize) {
@@ -190,7 +190,7 @@ namespace HTMATCH {
                 }
             }
             if (uPageIndex < AXONAL_ARBOUR_MAX_PAGES_PER_SIZE_BUCKET) {
-                MemPageBase* pNewPage = new MemPageBase(AXONAL_ARBOUR_MAX_ARBORS_PER_PAGE, uByteSize);
+                MemPageBase* pNewPage = new MemPageBase(AXONAL_ARBOUR_MAX_ARBORS_PER_PAGE, uByteSize, AXONAL_ARBOUR_LINE_SHIFT);
                 vecPages.push_back(pNewPage);
                 return _allocateNewArborDataKnowingPage(pNewPage, uPageIndex, uBucket, uByteSize, uExpansionCount, outFullIndex);
             } else {
@@ -226,37 +226,34 @@ namespace HTMATCH {
     class ParForwardExpand;
 
     template<class _Context>
-    typedef void (*ForwardExpandFunc)(_Context* pContext,
-        u16fast uBlockX, u16fast uBlockY, u16fast uBlockZ,
-        u8fast uIndexInBlock, uint64 uParam, i32fast iParallelIndex);
+    class ForwardExpandFuncHelper {
+        typedef void (*_Func)(_Context* pContext,
+            u16fast uBlockX, u16fast uBlockY, u16fast uBlockZ,
+            u8fast uIndexInBlock, uint64 uParam, i32fast iParallelIndex);
+    };
 
     class ForwardExpandImpl {
     private:
-        template<class _Context, typename Func>
+        template<class _Context, typename _Func>
         FORCE_INLINE static void _forwardExpandSecondPassImpl(_Context* pContext, const uint8* pAxonalArborData,
-            u8fast uFirstByte, u8fast uSecondByte, u8fast uThirdByte,
-            u16fast uOffsetX, u16fast uOffsetY, Func func, uint64 uParam, i32fast iParallelIndex) FORCE_INLINE_END
+            uint32 uFirstPassHeader, uint32 uPackedBlockOffset,
+            _Func func, uint64 uParam, i32fast iParallelIndex) FORCE_INLINE_END
         {
-            u8fast uShuntingDX = uFirstByte & 0x0Fu;                        // 4 lsb of 1st byte holds dX of shunting area
-            u8fast uShuntingDY = uFirstByte >> 4u;                          // 4 msb of 1st byte holds dY of shunting area
-            u8fast uShuntingZ = uSecondByte & 0x0Fu;                        // 4 lsb of 2nd byte holds Z of shunting area
-            u8fast uSecondExpansionCount = uSecondByte >> 4u;               // 4 msb of 2nd byte holds second exp. count
-            u16fast uSecondStepByteOffset = u16fast(uThirdByte) << 5u;      // 3rd byte holds half-page (=> x32Bytes) index
-            u16fast uBlockStartX = uOffsetX + (u16fast(uShuntingDX) << 3u);
-            u16fast uBlockStartY = uOffsetY + (u16fast(uShuntingDY) << 3u);
-            u8fast uBlockStartZ = uShuntingZ << 2u;
+            uint32 uSecondStepByteOffset = uFirstPassHeader >> 16u;
+            u8fast uSecondExpansionCount = u8fast(uFirstPassHeader >> 12u) & 0x0Fu;
+            uint32 uPackedFirstPassOffsets = uFirstPassHeader & 0x00000FFFu;
+            // expands packed XYZ, each as 4b, to the 'uPackedBlockOffset' layout (0,13,26),
+            //   with pre-integration of the (x8, x8, x4) factors, characteristic of the first-pass expansion
+            uint32 uFirstPassDeltas = expandXYZ<4u,4u,4u, 0u+3u, 13u+3u, 26u+2u>(uPackedFirstPassOffsets);
+            uPackedBlockOffset += uFirstPassDeltas;
             const uint8* pSecondStep = pAxonalArborData + uSecondStepByteOffset;
             for (u8fast uSecondStep = 0u; uSecondStep < uSecondExpansionCount; uSecondStep++) {
-                u8fast uFirstByte = u8fast(*(pSecondStep++=);
-                u8fast uIndexInBlock = u8fast(*(pSecondStep++=);
-                u16fast uBlockDX = u16fast(uFirstByte & 0x0007u);          // 3 lsb holds dX
-                u16fast uBlockDY = u16fast((uFirstByte >> 3u) & 0x0007u);  // 3 next holds dY
-                u16fast uBlockDZ = u16fast(uFirstByte >> 6u);              // 2 msb holds dZ
-                u16fast uBlockX = uBlockStartX + uBlockDX;
-                u16fast uBlockY = uBlockStartY + uBlockDY;
-                u16fast uBlockZ = uBlockStartZ + uBlockDZ;
-                // ... and at last calls the operation to perform
-                func(pContext, uBlockX, uBlockY, uBlockZ, uIndexInBlock, uParam, iParallelIndex);
+                uint32 uPackedSecondPassOffsets = uint32(*(pSecondStep++));
+                u8fast uIndexInBlock = u8fast(*(pSecondStep++));
+                // expands packed XYZ (3b,3b,2b), to the 'uPackedBlockOffset' layout (0,13,26),
+                uint32 uSecondPassDeltas = expandXYZ<3u,3u,2u, 0u, 13u, 26u>(uPackedSecondPassOffsets);
+                uint32 uPackedBlockHandleForThisIteration = uPackedBlockOffset + uSecondPassDeltas;
+                func(pContext, uPackedBlockHandleForThisIteration, uIndexInBlock, uParam, iParallelIndex);
             }
         }
         ; // template termination
@@ -272,16 +269,29 @@ namespace HTMATCH {
         //   AxonalArborMemManager repository of those expansion definitions, and a function to be invoked
         //   to each final 'coordinate'
         template<class _Context, typename _Func>
-        static void forwardExpandSignal(_Context* pContext, u32fast uAxonArbourHandle, AxonalArborMemManager* pArborDataMgr,
-            u32fast uOffsetX, u32fast uOffsetY, _Func func, uint64 uParam)
+        static i32fast forwardExpandSignal(_Context* pContext, u32fast uAxonArbourHandle,
+            const AxonalArborMemManager* pArborDataMgr, uint32 uPackedBlockOffset, _Func func, uint64 uParam)
         {
             u8fast uFirstExpansionCount;
             const uint8* pAxonalArborData = pArborDataMgr->getArborDataFor(uAxonArbourHandle, uFirstExpansionCount);
             if (uFirstExpansionCount && pAxonalArborData) {
                 return SeqForwardExpand::_forwardExpandSignal(
-                    pContext, uFirstExpansionCount, pAxonalArborData, uOffsetX, uOffsetY, func, uParam);
+                    pContext, uFirstExpansionCount, pAxonalArborData, uPackedBlockOffset, func, uParam);
             } else {
                 return 0;
+            }
+        }
+        ; // template termination
+
+        template<class _Context, typename _Func>
+        static void integrateEpspLists(_Context* pContext, u16fast uChunkStartX, u16fast uChunkStartY,
+                u16fast uChunkCountX, u16fast uChunkCountY, i32fast iNbLists, _Func func) {
+            for (u16fast uChunkX = uChunkStartX, uEndX = uChunkStartX + uChunkCountX; uChunkX < uEndX; uChunkX++) {
+                for (u16fast uChunkY = uChunkStartY, uEndY = uChunkStartY + uChunkCountY; uChunkY < uEndY; uChunkY++) {
+                    for (i32fast iList = 0; iList < iNbLists; iList++) {
+                        func(pContext, uChunkX, uChunkY, iList);
+                    }
+                }
             }
         }
         ; // template termination
@@ -289,15 +299,14 @@ namespace HTMATCH {
     private:
         template<class _Context, typename _Func>
         static i32fast _forwardExpandSignal(_Context* pContext, u8fast uFirstExpansionCount, const uint8* pAxonalArborData,
-            u32fast uOffsetX, u32fast uOffsetY, _Func func, uint64 uParam)
+            uint32 uPackedBlockOffset, _Func func, uint64 uParam)
         {
-            const uint8* pFirstStepHeader = pAxonalArborData;
-            for (u8fast uFirstStep = 0u; uFirstStep < uFirstExpansionCount; uFirstStep++) {
-                _forwardExpandSecondPassImpl(pContext, pAxonalArborData,
-                    u8fast(*(pFirstStepHeader++)), u8fast(*(pFirstStepHeader++)), u8fast(*(pFirstStepHeader++)),
-                    uOffsetX, uOffsetY, func, uParam, -1);
+            const uint32* pFirstStepHeader32 = reinterpret_cast<const uint32*>(pAxonalArborData);
+            for (u8fast uFirstStep = 0u; uFirstStep < uFirstExpansionCount; uFirstStep++, pFirstStepHeader32++) {
+                ForwardExpandImpl::_forwardExpandSecondPassImpl(pContext, pAxonalArborData,
+                    *pFirstStepHeader32, uPackedBlockOffset, func, uParam, 0);
             }
-            return -1;
+            return 1;
         }
         ; // template termination
 
@@ -308,18 +317,18 @@ namespace HTMATCH {
     class ParForwardExpand {
     public:
         template<class _Context, typename _Func>
-        static i32fast forwardExpandSignal(_Context* pContext, u32fast uAxonArbourHandle, AxonalArborMemManager* pArborDataMgr,
-                u32fast uOffsetX, u32fast uOffsetY, _Func func, uint64 uParam)
+        static i32fast forwardExpandSignal(_Context* pContext, u32fast uAxonArbourHandle,
+            const AxonalArborMemManager* pArborDataMgr, uint32 uPackedBlockOffset, _Func func, uint64 uParam)
         {
             u8fast uFirstExpansionCount;
             const uint8* pAxonalArborData = pArborDataMgr->getArborDataFor(uAxonArbourHandle, uFirstExpansionCount);
             if (uFirstExpansionCount && pAxonalArborData) {
                 if (uFirstExpansionCount < 4u) {
                     return SeqForwardExpand::_forwardExpandSignal(
-                        pContext, uFirstExpansionCount, pAxonalArborData, uOffsetX, uOffsetY, func, uParam);
+                        pContext, uFirstExpansionCount, pAxonalArborData, uPackedBlockOffset, func, uParam);
                 } else {
                     return ParForwardExpand::_forwardExpandSignal(
-                        pContext, uFirstExpansionCount, pAxonalArborData, uOffsetX, uOffsetY, func, uParam);
+                        pContext, uFirstExpansionCount, pAxonalArborData, uPackedBlockOffset, func, uParam);
                 }
             } else {
                 return 0;
@@ -327,17 +336,36 @@ namespace HTMATCH {
         }
         ; // template termination
 
+        template<class _Context, typename _Func>
+        static void integrateEpspLists(_Context* pContext, u16fast uChunkStartX, u16fast uChunkStartY,
+                u16fast uChunkCountX, u16fast uChunkCountY, i32fast iNbLists, _Func func) {
+            u32fast uTotalChunkCount = u32fast(uChunkCountX) * u32fast(uChunkCountY);
+            if (uTotalChunkCount < 4u) {
+                SeqForwardExpand::integrateEpspLists(pContext, uChunkStartX, uChunkStartY,
+                    uChunkCountX, uChunkCountY, iNbLists, func);
+            } else {
+                HTMATCH::for_count(HTMATCH_PAR, 0u, uTotalChunkCount,
+                    [pContext, uChunkStartX, uChunkStartY, uChunkCountY, iNbLists, func](u32fast uPackedChunkIndex) {
+                    u16fast uChunkX = uChunkStartX + u16fast(uPackedChunkIndex / uChunkCountY);
+                    u16fast uChunkY = uChunkStartY + u16fast(uPackedChunkIndex % uChunkCountY);
+                    for (i32fast iList = 0; iList < iNbLists; iList++) {
+                        func(pContext, uChunkX, uChunkY, iList);
+                    }
+                });
+            }
+        }
+        ; // template termination
+
     private:
         template<class _Context, typename _Func>
         static i32fast _forwardExpandSignal(_Context* pContext, u8fast uFirstExpansionCount, const uint8* pAxonalArborData,
-            u32fast uOffsetX, u32fast uOffsetY, _Func func, uint64 uParam)
+            uint32 uPackedBlockOffset, _Func func, uint64 uParam)
         {
             HTMATCH::for_count(HTMATCH_PAR, 0u, u32fast(uFirstExpansionCount),
-                [pContext, pAxonalArborData, uOffsetX, uOffsetY, func, uParam](u32fast uFirstStep) {
-                const uint8* pFirstStepHeader = pAxonalArborData + (uFirstStep*3u);
-                _forwardExpandSecondPassImpl(pContext, pAxonalArborData,
-                    u8fast(pFirstStepHeader[0]), u8fast(pFirstStepHeader[1]), u8fast(pFirstStepHeader[2]),
-                    uOffsetX, uOffsetY, func, uParam, i32fast(uFirstStep));
+                    [pContext, pAxonalArborData, uPackedBlockOffset, func, uParam](u32fast uFirstStep) {
+                const uint32* pFirstStepHeader32 = reinterpret_cast<const uint32*>(pAxonalArborData);
+                ForwardExpandImpl::_forwardExpandSecondPassImpl(pContext, pAxonalArborData,
+                    pFirstStepHeader32[uFirstStep], uPackedBlockOffset, func, uParam, i32fast(uFirstStep));
             });
             return i32fast(uFirstExpansionCount);
         }

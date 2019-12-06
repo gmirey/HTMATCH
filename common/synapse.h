@@ -244,7 +244,7 @@ namespace HTMATCH {
         {
             if (bAllowUnconnected && bAllowConnected) {
                 // ... choose whether it should be an initially connected or unconnected synapse (a fixed 50% chance of each)
-                SynPermSigned_t binaryConnectedDraw = SynPermSigned_t(pSynRand->getNext() & 1u); // 0 or 1
+                SynPermSigned_t binaryConnectedDraw = SynPermSigned_t(rng.getNext() & 1u); // 0 or 1
                 // impl unbranching choice by multiplying both result with either binaryConnectedDraw or its binary negation:
                 SynPermSigned_t whenConnected = _drawConnected(rng, thresholdAsSigned, rangeAbove);
                 SynPermSigned_t whenUnconnected = _drawUnconnected(rng, thresholdAsSigned, rangeBelow);

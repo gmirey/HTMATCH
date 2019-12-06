@@ -77,14 +77,14 @@ namespace HTMATCH {
 
     // and now we can wrap 'std::for_each' and its possibly parallel execution policies using NumIter...
     template<class _ExecPolicy, class _Func>
-    inline Func for_range(_ExecPolicy&& policy, u32fast uStart, u32fast uAfterLast, _Func func) {
+    inline _Func for_range(_ExecPolicy&& policy, u32fast uStart, u32fast uAfterLast, _Func func) {
         return std::for_each<_ExecPolicy, NumIter, _Func>(policy, NumIter(uStart), NumIter(uAfterLast), func);
     }
     ; // template termination
 
     // ...also some version preferring a startIndex + count... just syntactic sugar, really
     template<class _ExecPolicy, class _Func>
-    inline Func for_count(_ExecPolicy&& policy, u32fast uStart, u32fast uCount, _Func func) {
+    inline _Func for_count(_ExecPolicy&& policy, u32fast uStart, u32fast uCount, _Func func) {
         return std::for_each<_ExecPolicy, NumIter, _Func>(policy, NumIter(uStart), NumIter(uStart+uCount), func);
     }
     ; // template termination

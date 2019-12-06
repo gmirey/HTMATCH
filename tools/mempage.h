@@ -37,20 +37,29 @@ namespace HTMATCH {
     //   them as explicit parameters at various call sites. This *may* avoid some unnecessary
     //   fetching of a "header" cache line at the root when we're able to know those values from
     //   other means... but really is not certain and I'm guilty of some preemptive optim here.
-    // In any case, this class is derived (hopefully without a vtable!) in the more practical
-    //   'DefaultMemPage' class below
+    // In any case, this class is wrapped in the more practical 'DefaultMemPage' class below
     // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
     class MemPageBase {
     public:
-        MemPageBase(u32fast uCount, u32fast uByteSize):
+        MemPageBase(u32fast uSlotCount, u32fast uSlotByteSize, u8fast uAlignBits = 0u):
             _uNextIndex(0u), _uAllocatedCount(0u)
         {
-            u32fast uMaxQwords = getMaxQwordsFor(uByteSize, uCount);
+            u32fast uMaxQwords = getMaxQwordsFor(uSlotByteSize, uSlotCount);
             _pAvailabilityField = new uint64[uMaxQwords];
-            std::memset((void*)_pAvailabilityField, 0xFF, uMaxQwords * 64u);
-            _pData = (uint8*)std::calloc(uCount, uByteSize); // calling c-style calloc to be properly aligned to slot byte size
+            std::memset((void*)_pAvailabilityField, 0xFF, uMaxQwords * sizeof(uint64));
+            if (uAlignBits == 0u) {
+                uAlignBits = getMostSignificantBitPos32(uSlotByteSize);
+                if (uSlotByteSize & mask(uAlignBits))
+                    uAlignBits++;
+            }
+            _pData = (uint8*)HTMATCH_aligned_alloc(size_t(1u) << uAlignBits, size_t(uSlotByteSize) * size_t(uSlotCount));
         }
-        ~MemPageBase() { _release(); }
+        ~MemPageBase() {
+            delete[] _pAvailabilityField;
+            _pAvailabilityField = 0;
+            HTMATCH_aligned_free(_pData);
+            _pData = 0;
+        }
         FORCE_INLINE uint32 getAllocatedCount() const FORCE_INLINE_END { return _uAllocatedCount; }
         FORCE_INLINE bool isEmpty() const FORCE_INLINE_END { return _uAllocatedCount == 0u; }
         FORCE_INLINE static constexpr size_t getOffsetFor(u32fast uIndex, u32fast uByteSize) FORCE_INLINE_END {
@@ -94,8 +103,8 @@ namespace HTMATCH {
             } else {
                 uIndex++;
             }
-            uBit = getTrailingZeroesCount32(uField) + 1u;
-            if (uBit >= 64u || uBit < uIndex & 0x0000003Fu) {
+            uBit = getTrailingZeroesCount64(uField) + 1u;
+            if (uBit >= 64u || uBit < (uIndex & 0x0000003Fu)) {
                 throw std::runtime_error("MemPageBase::allocateNewSlot : invalid state");
             }
             _uNextIndex = uint32((uQword << 6u) + uBit);
@@ -120,12 +129,6 @@ namespace HTMATCH {
                 return false;
             }
         }
-    protected:
-        // do NOT call from elsewhere than a non-virtual dtor
-        void _release() {
-            delete[] _pAvailabilityField;
-            std::free(_pData); // c-style calloc'ed => c-style free'd
-        }
     private:
         uint32 _uNextIndex;
         uint32 _uAllocatedCount;
@@ -137,25 +140,30 @@ namespace HTMATCH {
     // DefaultMemPage: mem page actually storing its size and count properties.
     //   In effect a simple wrapper around MemPageBase
     // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    class DefaultMemPage : public MemPageBase {
-        DefaultMemPage(u32fast uCount, u32fast uByteSize):
-            MemPageBase(uCount, uByteSize),
+    class DefaultMemPage {
+        DefaultMemPage(u32fast uCount, u32fast uByteSize, u8fast uAlignBits = 0u):
+            _impl(uCount, uByteSize, uAlignBits),
             _uMaxCount(uCount), _uByteSize(uByteSize) {}
-        // NB: avoiding declaring this destructor (or any other method here) "virtual" for efficiency        
-        ~DefaultMemPage() { MemPageBase::_release(); } // => we here call the cleanup method from base explicitely
+        ~DefaultMemPage() {}
+        FORCE_INLINE uint32 getAllocatedCount() const FORCE_INLINE_END { return _impl.getAllocatedCount(); }
+        FORCE_INLINE bool isEmpty() const FORCE_INLINE_END { return _impl.isEmpty(); }
         FORCE_INLINE uint32 getMaxCount() const FORCE_INLINE_END { return _uMaxCount; }
         FORCE_INLINE uint32 getByteSize() const FORCE_INLINE_END { return _uByteSize; }
-        FORCE_INLINE bool isFull() const FORCE_INLINE_END { return getAllocatedCount() >= _uMaxCount; }
+        FORCE_INLINE bool isFull() const FORCE_INLINE_END { return _impl.getAllocatedCount() >= _uMaxCount; }
         FORCE_INLINE uint8* getDataFor(u32fast uIndex) FORCE_INLINE_END {
-            return MemPageBase::getDataFor(uIndex, u32fast(_uByteSize));
+            return _impl.getDataFor(uIndex, u32fast(_uByteSize));
         }
         FORCE_INLINE const uint8* getDataFor(u32fast uIndex) const FORCE_INLINE_END {
-            return MemPageBase::getDataFor(uIndex, u32fast(_uByteSize));
+            return _impl.getDataFor(uIndex, u32fast(_uByteSize));
         }
         FORCE_INLINE uint8* allocateNewSlot(u32fast* outIndex) FORCE_INLINE_END {
-            return MemPageBase::allocateNewSlot(u32fast(_uByteSize), u32fast(_uMaxCount), outIndex);
+            return _impl.allocateNewSlot(u32fast(_uByteSize), u32fast(_uMaxCount), outIndex);
+        }
+        FORCE_INLINE bool removeSlot(u32fast uIndex) FORCE_INLINE_END {
+            return _impl.removeSlot(uIndex);
         }
     private:
+        MemPageBase _impl;
         uint32 _uMaxCount;
         uint32 _uByteSize;
     };
@@ -168,12 +176,13 @@ namespace HTMATCH {
     class StaticMemPage {
     public:
         StaticMemPage():_impl(T_COUNT, T_SIZE) {}
-        ~StaticMemPage() {} // _impl dtor called implicitely => do not call _impl._release() there by hand!
+        StaticMemPage(u8fast uAlignBits):_impl(T_COUNT, T_SIZE, uAlignBits) {}
+        ~StaticMemPage() {}
         FORCE_INLINE uint32 getAllocatedCount() const FORCE_INLINE_END { return _impl.getAllocatedCount(); }
         FORCE_INLINE bool isEmpty() const FORCE_INLINE_END { return _impl.isEmpty(); }
         FORCE_INLINE static constexpr u32fast getMaxCount() FORCE_INLINE_END { return T_COUNT; }
         FORCE_INLINE static constexpr u32fast getByteSize() FORCE_INLINE_END { return T_SIZE; }
-        FORCE_INLINE bool isFull() const FORCE_INLINE_END { return getAllocatedCount() >= T_COUNT; }
+        FORCE_INLINE bool isFull() const FORCE_INLINE_END { return _impl.getAllocatedCount() >= T_COUNT; }
         FORCE_INLINE uint8* getDataFor(u32fast uIndex) FORCE_INLINE_END {
             return _impl.getDataFor(uIndex, u32fast(T_SIZE));
         }
