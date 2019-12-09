@@ -29,6 +29,10 @@
 #define HTMATCH_mask(uBitCount)             ((1u << (uBitCount))-1u)
 #define HTMATCH_mask64b(uBitCount)          ((1uLL << (uBitCount))-1uLL)
 
+#if defined (_MSC_VER)
+#  include "intrin.h"
+#endif
+
 namespace HTMATCH {
 
     // Fallback software implementations of some bit operations (which otherwise could be solved by some single CPU instruction)

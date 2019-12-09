@@ -33,9 +33,6 @@
     <ClCompile Include="..\examples\WinConsole.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\topoHTM\TopoSP.cpp">
-      <Filter>Source Files\topoHTM</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\examples\SampleTools.h">
@@ -70,12 +67,6 @@
     </ClInclude>
     <ClInclude Include="..\common\synapse.h">
       <Filter>Header Files\common</Filter>
-    </ClInclude>
-    <ClInclude Include="..\topoHTM\TopoHTMConfig.h">
-      <Filter>Header Files\topoHTM</Filter>
-    </ClInclude>
-    <ClInclude Include="..\topoHTM\TopoSP.h">
-      <Filter>Header Files\topoHTM</Filter>
     </ClInclude>
     <ClInclude Include="..\tools\bittools.h">
       <Filter>Header Files\tools</Filter>

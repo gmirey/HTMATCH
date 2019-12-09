@@ -21,7 +21,6 @@
   <ItemGroup>
     <ClCompile Include="..\examples\PerfTest.cpp" />
     <ClCompile Include="..\examples\WinConsole.cpp" />
-    <ClCompile Include="..\topoHTM\TopoSP.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\common\AxonalExpansion.h" />
@@ -34,8 +33,6 @@
     <ClInclude Include="..\tools\rand.h" />
     <ClInclude Include="..\tools\sdr.h" />
     <ClInclude Include="..\tools\system.h" />
-    <ClInclude Include="..\topoHTM\TopoHTMConfig.h" />
-    <ClInclude Include="..\topoHTM\TopoSP.h" />
     <ClInclude Include="..\vanillaHTM\VanillaHTMConfig.h" />
     <ClInclude Include="..\vanillaHTM\VanillaSP.h" />
     <ClInclude Include="..\vanillaHTM\VanillaSPGen.h" />
@@ -172,6 +169,7 @@
       <LanguageStandard>stdcpp17</LanguageStandard>
       <AdditionalIncludeDirectories>$(ProjectDir)/..;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <EnableEnhancedInstructionSet>AdvancedVectorExtensions</EnableEnhancedInstructionSet>
+      <AdditionalOptions>/Qvec-report:2 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>

@@ -42,17 +42,17 @@
 #if defined (_MSC_VER)
 #  define FORCE_INLINE            __forceinline
 #  define FORCE_INLINE_END
-#else
+#elif defined(__GNUC__) || defined(__clang__)
 #  define FORCE_INLINE            inline
 #  define FORCE_INLINE_END        __attribute__((always_inline))
+#else // no known way of hinting other compilers for a 'force inline' status... but should compile still
+#  define FORCE_INLINE            inline
+#  define FORCE_INLINE_END
 #endif
 
 #include "stdint.h"
 #include "stddef.h"
 #include "limits.h"
-#if defined (_MSC_VER)
-#  include "intrin.h"
-#endif
 
 namespace HTMATCH {
 
@@ -66,7 +66,7 @@ namespace HTMATCH {
     // We're unsure why the choice of 'char' for the 'int_fast8_t' definition in, eg., MSVC library... in the event that it
     //   stemmed from same aliasing concerns as expressed above, then the following macro definition will force it to use
     //   next-size-fastest, that is, int_fast16_t, which for MSVC library turns out to be 32b (and seems to make more sense for
-    //   most known processors)
+    //   most known processors). We hereby vow NOT TO use pointers to u8fast or i8fast as safely aliasable in HTMATCH.
     // YMMV here... => you can experiment with disabling this macro at will...
     #define HTMATCH_COERCE_FAST8_TO_FAST16
 
@@ -104,9 +104,9 @@ namespace HTMATCH {
 #endif
 
     typedef uint_fast16_t           u16fast;
-    typedef uint_fast32_t           u32fast;
-
     typedef int_fast16_t            i16fast;
+
+    typedef uint_fast32_t           u32fast;
     typedef int_fast32_t            i32fast;
 
 } // namespace HTMATCH

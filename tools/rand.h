@@ -74,22 +74,50 @@ public:
     }
 
     // Returns next number from this generator, hopefully uniform in [0 .. uOverMax-1]
-    uint32 drawNextFromZeroToExcl(uint32 uOverMax) {
-        // TODO : better than this (atm not totally uniform, even if not significant for relatively small 'uOverMax')
+    //   this version is fast, however not *precisely* uniform even if getNext() is, although not significantly so for
+    //   relatively small 'uOverMax'
+    FORCE_INLINE uint32 drawNextFromZeroToExcl(uint32 uOverMax) FORCE_INLINE_END {
         return getNext() % uOverMax;
     }
 
+    // Returns next number from this generator, hopefully uniform in [0 .. uOverMax-1]
+    //   this version will enforce uniformity of result (provided getNext() is uniform itself), by re-drawing until so
+    //   => please refrain from using very, very high (above 2 billions, for example) values for 'uOverMax'
+    uint32 drawNextFromZeroToExcl_forceUniform(uint32 uOverMax) {
+        uint32 uNext = getNext();
+        const uint32 uRemainderWhenhigh = 0xFFFFFFFFu % uOverMax;
+        if (uRemainderWhenhigh < uOverMax-1u) {    // if result when max uint is less than max remainder, then whenever
+            uint32 uMax = 0xFFFFFFFFu - uRemainderWhenhigh; // we draw one of the very-highest results (above max uint minus
+            while (uNext >= uMax)                           // that value), we're not sampling the range uniformly
+                uNext = getNext();                          // => force drawing a brand new value, until we are
+        }
+        return uNext % uOverMax;
+    }
+
     // Returns next number from this generator, hopefully uniform in [0.0 .. 1.0)
-    float getNextAsFloat01() {
-        return float(double(getNext()) * (1.0 / 4294967296.0));
+    FORCE_INLINE double getNextAsDouble01() FORCE_INLINE_END {
+        return double(getNext()) * (1.0 / 4294967296.0);
     }
     // Returns next number from this generator, hopefully uniform in [0.0 .. 1.0]
-    float getNextAsFloat01inclusive() {
-        return float(double(getNext()) / 4294967295.0);
+    FORCE_INLINE double getNextAsDouble01inclusive() FORCE_INLINE_END {
+        return double(getNext()) / 4294967295.0;
     }
     // Returns next number from this generator, hopefully uniform in [-1.0 .. 1.0]
-    float getNextAsFloatNeg1Pos1() {
-        return float(1.0 - double(getNext()) / 2147483647.5);
+    FORCE_INLINE double getNextAsDoubleNeg1Pos1() FORCE_INLINE_END {
+        return 1.0 - (double(getNext()) / 2147483647.5);
+    }
+
+    // Returns next number from this generator as 32b floating point, hopefully uniform in [0.0 .. 1.0)
+    FORCE_INLINE float getNextAsFloat01() FORCE_INLINE_END {
+        return float(getNextAsDouble01());
+    }
+    // Returns next number from this generator as 32b floating point, hopefully uniform in [0.0 .. 1.0]
+    FORCE_INLINE float getNextAsFloat01inclusive() FORCE_INLINE_END {
+        return float(getNextAsDouble01inclusive());
+    }
+    // Returns next number from this generator as 32b floating point, hopefully uniform in [-1.0 .. 1.0]
+    FORCE_INLINE float getNextAsFloatNeg1Pos1() FORCE_INLINE_END {
+        return float(getNextAsDoubleNeg1Pos1());
     }
 
 private:
