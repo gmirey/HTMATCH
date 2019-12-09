@@ -34,6 +34,48 @@
 
 using namespace HTMATCH;
 
+// a 32K struct
+struct SegIntegrationZone {
+    uint32 _uCount;
+    uint32 _tList[8191u];
+};
+// a 8x8 minicolumns area (about a tenth of a sq mm)
+struct IntegrationZone {
+    IntegrationZone(uint32 uCountZ) :
+        _uCountZ(uCountZ)
+    {
+        // 2^15 bytes per 'uCountZ'... 2MB if max uCountZ (64)
+        _pSegStates = new uint8[uCountZ * (8u * 8u * 512u)];      // 512 max segments per block
+        // 2^21 bytes per 'uCountZ'... 128MB if max uCountZ (64)
+        _pAxonFwd = new uint16[uCountZ * (8u * 8u * 256u * 64u)]; // 256 max axon terminal holding 64 synapse each
+        // + 128 x 32K => 4MB for the 'tListsPerExp' array
+    }
+    ~IntegrationZone() {
+        delete[] _pSegStates;
+        delete[] _pAxonFwd;
+    }
+    FORCE_INLINE void resetStates() FORCE_INLINE_END {
+        std::memset(_pSegStates, 0, _uCountZ * (8u * 8u * 512u));
+    }
+    FORCE_INLINE void resetIntgLists() FORCE_INLINE_END {
+        std::memset(_pSegStates, 0, _uCountZ * (8u * 8u * 256u * 64u * 2u));
+    }
+    FORCE_INLINE uint64 getIterResultsAndClear() FORCE_INLINE_END {
+        uint32 uSegCount = _uCountZ * (8u * 8u * 512u);
+        uint64 uResult = 0uLL;
+        for (size_t uSeg = 0u; uSeg < uSegCount; uSeg++) {
+            uResult += uint64(_pSegStates[uSeg]);
+        }
+        std::memset(_pSegStates, 0u, uSegCount);
+        return uResult;
+    }
+
+    uint32 _uCountZ;
+    uint8* _pSegStates;
+    uint16* _pAxonFwd;
+    SegIntegrationZone tListsPerExp[128u];
+};
+
 struct SegIntegrationZone {
     uint32 _uCount;
     uint32 _tList[8191u];
@@ -43,33 +85,40 @@ struct TestTopo {
     TestTopo(uint32 uCountX, uint32 uCountY, uint32 uCountZ):
         _uCountX(uCountX), _uCountY(uCountY), _uCountZ(uCountZ)
     {
-        uint32 uTotalCount = _uCountX * _uCountY * _uCountZ;
-        _pSegStates = new uint8[size_t(uTotalCount) * size_t(512u)];                    // max 512 segs per block
-        _pAxonFwd = new uint16[size_t(uTotalCount) * (size_t(256u) * size_t(64u))];     // max 256 axons per block, x64 synapses
         _uCountZoneX = reqCountCoarseTo(uCountX, 3u);
         _uCountZoneY = reqCountCoarseTo(uCountY, 3u);
-        _uCountZoneXY = _uCountZoneX * _uCountZoneY;
-        _pSegIntegrationZones = new SegIntegrationZone[size_t(_uCountZoneXY) * size_t(128u)]; // 128 exp x zones
+        uint32 uTotalZones = _uCountZoneX * _uCountZoneY;
+        _pZones = new SegIntegrationZone*[_uCountZoneXY]; // 128 exp x zones
+        for (uint32 uZone = 0u; uZone < uTotalZones; uZone++) {
+            _pZones[uZone] = new SegIntegrationZone(uCountZ);
+        }
+        _uCountZoneXY = uTotalZones;
         _pAxonHandlesAndOffsets = 0;
     }
     ~TestTopo() {
-        delete[] _pSegStates;
-        delete[] _pAxonFwd;
-        delete[] _pSegIntegrationZones;
+        uint32 uTotalZones = _uCountZoneXY;
+        for (uint32 uZone = 0u; uZone < uTotalZones; uZone++) {
+            delete _pZones[uZone];
+        }
+        delete[] _pZones;
         if (_pAxonHandlesAndOffsets)
             delete[] _pAxonHandlesAndOffsets;
     }
     void resetStates() {
-        uint32 uTotalCount = _uCountX * _uCountY * _uCountZ;
-        std::memset(_pSegStates, 0u, size_t(uTotalCount) * size_t(512u));
+        uint32 uTotalZones = _uCountZoneXY;
+        for (uint32 uZone = 0u; uZone < uTotalZones; uZone++) {
+            _pZones[uZone]->resetStates();
+        }
     }
-    void resetIntgZones() {
-        uint32 uTotalZoneCount = _uCountZoneX * _uCountZoneY;
-        std::memset(_pSegIntegrationZones, 0u, size_t(uTotalZoneCount) * size_t(128u));
+    void resetIntgLists() {
+        uint32 uTotalZones = _uCountZoneXY;
+        for (uint32 uZone = 0u; uZone < uTotalZones; uZone++) {
+            _pZones[uZone]->resetIntgLists();
+        }
     }
     void resetAll() {
         resetStates();
-        resetIntgZones();
+        resetIntgLists();
     }
     void allocateAxonalTables(uint32 uAxonCount) {
         if (_pAxonHandlesAndOffsets)
@@ -81,25 +130,21 @@ struct TestTopo {
     FORCE_INLINE uint64 getOffsetAndHandleFor(uint32 uAxon) const FORCE_INLINE_END { return _pAxonHandlesAndOffsets[uAxon]; }
 
     FORCE_INLINE static void doHtmExpansionToSeg(TestTopo* pContext,
-            uint32 uPackedBlockHandle,
-            u8fast uAxonIndexInBlock, uint64 uParam, i32fast) FORCE_INLINE_END {
+            uint64 uPackedBlockHandle, u8fast uAxonIndexInBlock, uint64 uParam, i32fast) FORCE_INLINE_END {
         pContext->_doHtmExpansionToSeg(uPackedBlockHandle, uAxonIndexInBlock, uParam);
     }
     FORCE_INLINE static void doHtmExpansionToList(TestTopo* pContext,
-            uint32 uPackedBlockHandle,
-            u8fast uAxonIndexInBlock, uint64 uParam, i32fast iParallelIndex) FORCE_INLINE_END {
+            uint64 uPackedBlockHandle, u8fast uAxonIndexInBlock, uint64 uParam, i32fast iParallelIndex) FORCE_INLINE_END {
         pContext->_doHtmExpansionToList(uPackedBlockHandle, uAxonIndexInBlock, uParam, iParallelIndex);
     }
     FORCE_INLINE uint32 getZoneCountX() const FORCE_INLINE_END { return _uCountZoneX; } 
     FORCE_INLINE uint32 getZoneCountY() const FORCE_INLINE_END { return _uCountZoneY; }
     uint64 getIterResultsAndClear() {
-        uint32 uTotalCount = _uCountX * _uCountY * _uCountZ;
-        size_t uTotalSegCount = size_t(uTotalCount) * size_t(512u);
+        uint32 uTotalZones = _uCountZoneXY;
         uint64 uResult = 0uLL;
-        for (size_t uSeg = 0u; uSeg < uTotalSegCount; uSeg++) {
-            uResult += uint32(_pSegStates[uSeg]);
+        for (uint32 uZone = 0u; uZone < uTotalZones; uZone++) {
+            uResult += _pZones[uZone]->getIterResultsAndClear();
         }
-        std::memset(_pSegStates, 0u, uTotalSegCount);
         return uResult;
     }
 
@@ -134,55 +179,55 @@ private:
         return (size_t((uBlockX * _uCountY + uBlockY) * _uCountZ + uBlockZ) << 8u) | size_t(uAxonIdInBlock);
     }
 
-    FORCE_INLINE void _doHtmExpansionToSeg(uint32 uPackedBlockHandle,
+    FORCE_INLINE void _doHtmExpansionToSeg(uint64 uPackedBlockHandle,
             u8fast uAxonIndexInBlock, uint64 uParam) FORCE_INLINE_END {
-        uint32 uBlockX = uPackedBlockHandle & 0x00001FFFu;
-        uint32 uBlockY = (uPackedBlockHandle >> 13u) & 0x00001FFFu;
-        uint32 uBlockZ = uPackedBlockHandle >> 26u;
+        uint32 uBlockX = uPackedBlockHandle >> 19u;
+        uint32 uBlockY = (uPackedBlockHandle >> 6u) & 0x00001FFFu;
+        uint32 uBlockZ = uPackedBlockHandle & 0x0000003Fu;
         size_t uOffset = _getAxonOffset(uBlockX, uBlockY, uBlockZ, uAxonIndexInBlock);
         const uint16* pSynInAxon = _pAxonFwd + (uOffset * size_t(64u));
         for (uint16 uSyn = 0u; uSyn < 64u; uSyn++) {
             uint16 uSynData = pSynInAxon[uSyn];
-            uint32 uSegOffset = uint32(uSynData & 0x0007u);
+            uint64 uSegOffset = uint64(uSynData & 0x0007u);
             uint16 uSegIndexInBlock = (uSynData >> 3u) & 0x01FFu;
             uint16 uSynPerm = uSynData >> 12u;
-            uint32 uSegBlockHandle = uPackedBlockHandle + expandXYZ<1u,1u,1u, 0u, 13u, 26u>(uSegOffset);
+            uint64 uSegBlockHandle = uPackedBlockHandle + expandXYZ64<1u,1u,1u, 0u, 16u, 32u>(uSegOffset);
             _intgDirectToSeg(uSegBlockHandle, uSegIndexInBlock, uSynPerm, uParam);
         }
     }
-    FORCE_INLINE void _doHtmExpansionToList(uint32 uPackedBlockHandle,
+    FORCE_INLINE void _doHtmExpansionToList(uint64 uPackedBlockHandle,
             u8fast uAxonIndexInBlock, uint64 uParam, i32fast iParallelIndex) FORCE_INLINE_END {
-        uint32 uBlockX = uPackedBlockHandle & 0x00001FFFu;
-        uint32 uBlockY = (uPackedBlockHandle >> 13u) & 0x00001FFFu;
-        uint32 uBlockZ = uPackedBlockHandle >> 26u;
+        uint32 uBlockX = uint32(uPackedBlockHandle & 0x0000FFFFu);
+        uint32 uBlockY = uint32((uPackedBlockHandle >> 16u) & 0x0000FFFFu);
+        uint32 uBlockZ = uint32(uPackedBlockHandle >> 32u);
         size_t uOffset = _getAxonOffset(uBlockX, uBlockY, uBlockZ, uAxonIndexInBlock);
         const uint16* pSynInAxon = _pAxonFwd + (uOffset * size_t(64u));
         for (uint16 uSyn = 0u; uSyn < 64u; uSyn++) {
             uint16 uSynData = pSynInAxon[uSyn];
-            uint32 uSegOffset = uint32(uSynData & 0x0007u);
+            uint64 uSegOffset = uint64(uSynData & 0x0007u);
             uint16 uSegIndexInBlock = (uSynData >> 3u) & 0x01FFu;
             uint16 uSynPerm = uSynData >> 12u;
-            uint32 uSegBlockHandle = uPackedBlockHandle + expandXYZ<1u,1u,1u, 0u, 13u, 26u>(uSegOffset);
+            uint64 uSegBlockHandle = uPackedBlockHandle + expandXYZ64<1u,1u,1u, 0u, 16u, 32u>(uSegOffset);
             _toIntgList(uSegBlockHandle, uSegIndexInBlock, uSynPerm, uParam, iParallelIndex);
         }
     }
 
-    FORCE_INLINE void _intgDirectToSeg(uint32 uPackedBlockHandle, uint16 uSegIndexInBlock,
+    FORCE_INLINE void _intgDirectToSeg(uint64 uPackedBlockHandle, uint16 uSegIndexInBlock,
             uint16 uSynPerm, uint64 uParam) FORCE_INLINE_END {
-        uint32 uBlockX = uPackedBlockHandle & 0x00001FFFu;
-        uint32 uBlockY = (uPackedBlockHandle >> 13u) & 0x00001FFFu;
-        uint32 uBlockZ = uPackedBlockHandle >> 26u;
+        uint32 uBlockX = uint32(uPackedBlockHandle & 0x0000FFFFu);
+        uint32 uBlockY = uint32((uPackedBlockHandle >> 16u) & 0x0000FFFFu);
+        uint32 uBlockZ = uint32(uPackedBlockHandle >> 32u);
         size_t uSegIndex = _getSegIndex(uBlockX, uBlockY, uBlockZ, uSegIndexInBlock);
         uint8 uCurrentState = _pSegStates[uSegIndex];
         uint8 uUpdtState = _intgState(uCurrentState, uSynPerm, uParam);
         _pSegStates[uSegIndex] = uUpdtState;
     }
 
-    FORCE_INLINE void _toIntgList(uint32 uPackedBlockHandle, uint16 uSegIndexInBlock,
+    FORCE_INLINE void _toIntgList(uint64 uPackedBlockHandle, uint16 uSegIndexInBlock,
             uint16 uSynPerm, uint64 uParam, i32fast iParallelIndex) FORCE_INLINE_END {
-        uint32 uBlockX = uPackedBlockHandle & 0x00001FFFu;
-        uint32 uBlockY = (uPackedBlockHandle >> 13u) & 0x00001FFFu;
-        uint32 uBlockZ = uPackedBlockHandle >> 26u;
+        uint32 uBlockX = uint32(uPackedBlockHandle & 0x0000FFFFu);
+        uint32 uBlockY = uint32((uPackedBlockHandle >> 16u) & 0x0000FFFFu);
+        uint32 uBlockZ = uint32(uPackedBlockHandle >> 32u);
         uint32 uZoneX = uBlockX >> 3u;
         uint32 uZoneY = uBlockY >> 3u;
         uint32 uInZoneId = ((uBlockX & 0x00000007u) << 9u) | ((uBlockY & 0x00000007u) << 12u) |
@@ -215,9 +260,7 @@ private:
     uint32 _uCountZoneX;
     uint32 _uCountZoneY;
     uint32 _uCountZoneXY;
-    uint8* _pSegStates;
-    uint16* _pAxonFwd;
-    SegIntegrationZone* _pSegIntegrationZones;
+    SegIntegrationZone** _pZones;
     uint64* _pAxonHandlesAndOffsets;
 };
 
@@ -242,9 +285,9 @@ int main()
 
     static const uint32 uAxonCountX = 250u;
     static const uint32 uAxonCountY = 250u;
-    static const uint32 uAxonCountZ = 100u;
+    static const uint32 uAxonCountZ = 42u;
     
-    static const uint32 uTotalAxonCount = uAxonCountX * uAxonCountY * uAxonCountZ;  // 6 250 000
+    static const uint32 uTotalAxonCount = uAxonCountX * uAxonCountY * uAxonCountZ;  // 2 625 000
 
     static const uint32 uIterationCount = 1'000'000u;
     static const uint32 uMeanActivCount = 16u;
@@ -266,8 +309,10 @@ int main()
         for (uint32 uActiv = 0u; uActiv < uActivThisTime; uActiv++) {
             uint32 uAxon = rng.drawNextFromZeroToExcl(uTotalAxonCount);
             uint64 uOffsetAndHandle = pResultingTopo->getOffsetAndHandleFor(uAxon);
-            SeqForwardExpand::forwardExpandSignal(pResultingTopo, uint32(uOffsetAndHandle >> 32u), 
-                pAxonalArborMemMgr, uint32(uOffsetAndHandle), TestTopo::doHtmExpansionToSeg, 0u);
+            uint32 uHandle = uint32(uOffsetAndHandle);
+            uint64 uExpandedOffset = uOffsetAndHandle >> 32u;
+            SeqForwardExpand::forwardExpandSignal(pResultingTopo, uExpandedOffset, 
+                pAxonalArborMemMgr, uHandle, TestTopo::doHtmExpansionToSeg, 1u);
         }
         uReallyDone += uint64(uActivThisTime);
         uResult += pResultingTopo->getIterResultsAndClear();
@@ -302,8 +347,10 @@ int main()
         for (uint32 uActiv = 0u; uActiv < uActivThisTime; uActiv++) {
             uint32 uAxon = rng.drawNextFromZeroToExcl(uTotalAxonCount);
             uint64 uOffsetAndHandle = pResultingTopo->getOffsetAndHandleFor(uAxon);
-            i32fast iExpThisTime = ParForwardExpand::forwardExpandSignal(pResultingTopo, uint32(uOffsetAndHandle >> 32u), 
-                pAxonalArborMemMgr, uint32(uOffsetAndHandle), TestTopo::doHtmExpansionToList, 0u);
+            uint32 uHandle = uint32(uOffsetAndHandle);
+            uint64 uExpandedOffset = uOffsetAndHandle >> 32u;
+            i32fast iExpThisTime = ParForwardExpand::forwardExpandSignal(pResultingTopo, uExpandedOffset, 
+                pAxonalArborMemMgr, uHandle, TestTopo::doHtmExpansionToList, 1u);
             if (iMaxExp < iExpThisTime)
                 iMaxExp = iExpThisTime;
         }

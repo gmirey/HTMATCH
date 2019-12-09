@@ -328,11 +328,11 @@ namespace HTMATCH {
     // t-param uPosY: desired bit-position of the start of the Y coordinate in expanded result
     template<uint8 uBitX, uint8 uBitY, uint8 uPosX, uint8 uPosY>
     FORCE_INLINE const uint32 expandXY(uint32 uPackedValue) FORCE_INLINE_END {
-        static_assert(uBitX > 0 && uBitX < sizeof(uint32)*CHAR_BIT,           "invalid 32b range for X");
-        static_assert(uBitY > 0 && uBitY < sizeof(uint32)*CHAR_BIT,           "invalid 32b range for Y");
-        static_assert(uPosY <= sizeof(uint32)*CHAR_BIT - uBitY,               "result overflow");
-        static_assert(uPosY > uPosX,                                          "invalid XY ordering");
-        static_assert(uPosX+uBitX+uBitY+uBitX <= uPosY,                       "intermediate overflow to final Y position");
+        static_assert(uBitX > 0 && uBitX < sizeof(uint32)*CHAR_BIT, "invalid 32b range for X");
+        static_assert(uBitY > 0 && uBitY < sizeof(uint32)*CHAR_BIT, "invalid 32b range for Y");
+        static_assert(uPosY <= sizeof(uint32)*CHAR_BIT - uBitY,     "result overflow");
+        static_assert(uPosY > uPosX,                                "invalid XY ordering");
+        static_assert(uPosX+uBitX+uBitX+1 <= uPosY,                 "intermediate overflow to final Y position");
         static const uint32 uMultiplier = (1u << uPosX) | (1u << (uPosY-uBitX));
         static const uint32 uMask = (uint32(mask(uBitX)) << uPosX) | (uint32(mask(uBitY)) << uPosY);
         return (uPackedValue * uMultiplier) & uMask;
@@ -359,8 +359,8 @@ namespace HTMATCH {
         static_assert(uBitZ > 0 && uBitZ < sizeof(uint32)*CHAR_BIT, "invalid 32b range for Z");
         static_assert(uPosZ <= sizeof(uint32)*CHAR_BIT - uBitZ,     "result overflow");
         static_assert(uPosZ > uPosY && uPosY > uPosX,               "invalid XYZ ordering");
-        static_assert(uPosX+uBitX+uBitY+uBitX <= uPosY,             "intermediate overflow to final Y position");
-        static_assert(uPosY+uBitY+uBitZ+uBitX+uBitY <= uPosZ,       "intermediate overflow to final Z position");
+        static_assert(uPosX+uBitX+uBitX+1 <= uPosY,                 "intermediate overflow to final Y position");
+        static_assert(uPosY+uBitY+uBitX+uBitY+1 <= uPosZ,           "intermediate overflow to final Z position");
         static const uint32 uMultiplier = (1u << uPosX) | (1u << (uPosY-uBitX)) | (1u << (uPosZ-uBitX-uBitY));
         static const uint32 uMask =
             (uint32(mask(uBitX)) << uPosX) | (uint32(mask(uBitY)) << uPosY) | (uint32(mask(uBitZ)) << uPosZ);
@@ -371,11 +371,11 @@ namespace HTMATCH {
     // 64b version of expandXY, see above
     template<uint8 uBitX, uint8 uBitY, uint8 uPosX, uint8 uPosY>
     FORCE_INLINE const uint64 expandXY64(uint64 uPackedValue) FORCE_INLINE_END {
-        static_assert(uBitX > 0 && uBitX < sizeof(uint64)*CHAR_BIT,           "invalid 64b range for X");
-        static_assert(uBitY > 0 && uBitY < sizeof(uint64)*CHAR_BIT,           "invalid 64b range for Y");
-        static_assert(uPosY <= sizeof(uint32)*CHAR_BIT - uBitY,               "result overflow");
-        static_assert(uPosY > uPosX,                                          "invalid XY ordering");
-        static_assert(uPosX+uBitX+uBitY+uBitX <= uPosY,                       "intermediate overflow to final Y position");
+        static_assert(uBitX > 0 && uBitX < sizeof(uint64)*CHAR_BIT, "invalid 64b range for X");
+        static_assert(uBitY > 0 && uBitY < sizeof(uint64)*CHAR_BIT, "invalid 64b range for Y");
+        static_assert(uPosY <= sizeof(uint32)*CHAR_BIT - uBitY,     "result overflow");
+        static_assert(uPosY > uPosX,                                "invalid XY ordering");
+        static_assert(uPosX+uBitX+uBitX+1 <= uPosY,                 "intermediate overflow to final Y position");
         static const uint64 uMultiplier = (1uLL << uPosX) | (1uLL << (uPosY-uBitX));
         static const uint64 uMask = (mask64(uBitX) << uPosX) | (mask64(uBitY) << uPosY);
         return (uPackedValue * uMultiplier) & uMask;
@@ -390,8 +390,8 @@ namespace HTMATCH {
         static_assert(uBitZ > 0 && uBitZ < sizeof(uint64)*CHAR_BIT, "invalid 64b range for Z");
         static_assert(uPosZ <= sizeof(uint64)*CHAR_BIT - uBitZ,     "result overflow");
         static_assert(uPosZ > uPosY && uPosY > uPosX,               "invalid XYZ ordering");
-        static_assert(uPosX+uBitX+uBitY+uBitX <= uPosY,             "intermediate overflow to final Y position");
-        static_assert(uPosY+uBitY+uBitZ+uBitX+uBitY <= uPosZ,       "intermediate overflow to final Z position");
+        static_assert(uPosX+uBitX+uBitX+1 <= uPosY,                 "intermediate overflow to final Y position");
+        static_assert(uPosY+uBitY+uBitX+uBitY+1 <= uPosZ,           "intermediate overflow to final Z position");
         static const uint64 uMultiplier = (1uLL << uPosX) | (1uLL << (uPosY-uBitX)) | (1uLL << (uPosZ-uBitX-uBitY));
         static const uint64 uMask = (mask64(uBitX) << uPosX) | (mask64(uBitY) << uPosY) | (mask64(uBitZ) << uPosZ);
         return (uPackedValue * uMultiplier) & uMask;
