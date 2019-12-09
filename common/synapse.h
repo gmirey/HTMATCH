@@ -173,59 +173,59 @@ namespace HTMATCH {
             getDefaultSpreadAtReset()         { return 65536; }   // .16b ratio (= 1.0)
     };
     template<> struct SynapticDefaultsHelper<k_eSynapticMode_fixed8> {
-        static constexpr typename SynapseKind<k_eSynapticMode_fixed16>::SynPermSigned_t
+        static constexpr typename SynapseKind<k_eSynapticMode_fixed8>::SynPermSigned_t
             getDefaultInactiveDec()           { return 1; }       // .8b' => 0.00392156863
-        static constexpr typename SynapseKind<k_eSynapticMode_fixed16>::SynPermSigned_t
+        static constexpr typename SynapseKind<k_eSynapticMode_fixed8>::SynPermSigned_t
             getDefaultActiveInc()             { return 6; }       // .8b' => 0.0235294118
-        static constexpr typename SynapseKind<k_eSynapticMode_fixed16>::SynPermSigned_t
+        static constexpr typename SynapseKind<k_eSynapticMode_fixed8>::SynPermSigned_t
             getDefaultBelowStimInc()          { return 7; }       // .8b' => 0.0274509804
-        static constexpr typename SynapseKind<k_eSynapticMode_fixed16>::SynPermanence_t
+        static constexpr typename SynapseKind<k_eSynapticMode_fixed8>::SynPermanence_t
             getDefaultConnectionThreshold()   { return 64u; }     // .8b' => 0.2509803922
-        static constexpr typename SynapseKind<k_eSynapticMode_fixed16>::SynPermSigned_t
+        static constexpr typename SynapseKind<k_eSynapticMode_fixed8>::SynPermSigned_t
             getDefaultSpreadAtInit()          { return 65535; }   // .16b ratio (= 1.0)
-        static constexpr typename SynapseKind<k_eSynapticMode_fixed16>::SynPermSigned_t
+        static constexpr typename SynapseKind<k_eSynapticMode_fixed8>::SynPermSigned_t
             getDefaultSpreadAtReset()         { return 65535; }   // .16b ratio (= 1.0)
     };
     template<> struct SynapticDefaultsHelper<k_eSynapticMode_packed5> {
-        static constexpr typename SynapseKind<k_eSynapticMode_fixed16>::SynPermSigned_t
+        static constexpr typename SynapseKind<k_eSynapticMode_packed5>::SynPermSigned_t
             getDefaultInactiveDec()           { return 257;  }    // .16b ratio (= 0.00392150879)    (same as 8b)
-        static constexpr typename SynapseKind<k_eSynapticMode_fixed16>::SynPermSigned_t
+        static constexpr typename SynapseKind<k_eSynapticMode_packed5>::SynPermSigned_t
             getDefaultActiveInc()             { return 1542; }    // .16b ratio (= 0.0235290527)     (same as 8b)
-        static constexpr typename SynapseKind<k_eSynapticMode_fixed16>::SynPermSigned_t
+        static constexpr typename SynapseKind<k_eSynapticMode_packed5>::SynPermSigned_t
             getDefaultBelowStimInc()          { return 1799; }    // .16b ratio (= 0.0274505615)     (same as 8b)
-        static constexpr typename SynapseKind<k_eSynapticMode_fixed16>::SynPermanence_t
+        static constexpr typename SynapseKind<k_eSynapticMode_packed5>::SynPermanence_t
             getDefaultConnectionThreshold()   { return 8u; }      // .5b* => 0.25                    (differs slightly from 8b)
-        static constexpr typename SynapseKind<k_eSynapticMode_fixed16>::SynPermSigned_t
+        static constexpr typename SynapseKind<k_eSynapticMode_packed5>::SynPermSigned_t
             getDefaultSpreadAtInit()          { return 65536; }   // .16b ratio (= 1.0)
-        static constexpr typename SynapseKind<k_eSynapticMode_fixed16>::SynPermSigned_t
+        static constexpr typename SynapseKind<k_eSynapticMode_packed5>::SynPermSigned_t
             getDefaultSpreadAtReset()         { return 65536; }   // .16b ratio (= 1.0)
     };
     template<> struct SynapticDefaultsHelper<k_eSynapticMode_packed4> {
-        static constexpr typename SynapseKind<k_eSynapticMode_fixed16>::SynPermSigned_t
+        static constexpr typename SynapseKind<k_eSynapticMode_packed4>::SynPermSigned_t
             getDefaultInactiveDec()           { return 257;  }    // .16b ratio (= 0.00392150879)    (same as 8b)
-        static constexpr typename SynapseKind<k_eSynapticMode_fixed16>::SynPermSigned_t
+        static constexpr typename SynapseKind<k_eSynapticMode_packed4>::SynPermSigned_t
             getDefaultActiveInc()             { return 1542; }    // .16b ratio (= 0.0235290527)     (same as 8b)
-        static constexpr typename SynapseKind<k_eSynapticMode_fixed16>::SynPermSigned_t
+        static constexpr typename SynapseKind<k_eSynapticMode_packed4>::SynPermSigned_t
             getDefaultBelowStimInc()          { return 1799; }    // .16b ratio (= 0.0274505615)     (same as 8b)
-        static constexpr typename SynapseKind<k_eSynapticMode_fixed16>::SynPermanence_t
+        static constexpr typename SynapseKind<k_eSynapticMode_packed4>::SynPermanence_t
             getDefaultConnectionThreshold()   { return 4u; }      // .4b* => 0.25                    (differs slightly from 8b)
-        static constexpr typename SynapseKind<k_eSynapticMode_fixed16>::SynPermSigned_t
+        static constexpr typename SynapseKind<k_eSynapticMode_packed4>::SynPermSigned_t
             getDefaultSpreadAtInit()          { return 65536; }   // .16b ratio (= 1.0)
-        static constexpr typename SynapseKind<k_eSynapticMode_fixed16>::SynPermSigned_t
+        static constexpr typename SynapseKind<k_eSynapticMode_packed4>::SynPermSigned_t
             getDefaultSpreadAtReset()         { return 65536; }   // .16b ratio (= 1.0)
     };
     template<> struct SynapticDefaultsHelper<k_eSynapticMode_packed3> {
-        static constexpr typename SynapseKind<k_eSynapticMode_fixed16>::SynPermSigned_t
+        static constexpr typename SynapseKind<k_eSynapticMode_packed3>::SynPermSigned_t
             getDefaultInactiveDec()           { return 257;  }    // .16b ratio (= 0.00392150879)    (same as 8b)
-        static constexpr typename SynapseKind<k_eSynapticMode_fixed16>::SynPermSigned_t
+        static constexpr typename SynapseKind<k_eSynapticMode_packed3>::SynPermSigned_t
             getDefaultActiveInc()             { return 1542; }    // .16b ratio (= 0.0235290527)     (same as 8b)
-        static constexpr typename SynapseKind<k_eSynapticMode_fixed16>::SynPermSigned_t
+        static constexpr typename SynapseKind<k_eSynapticMode_packed3>::SynPermSigned_t
             getDefaultBelowStimInc()          { return 1799; }    // .16b ratio (= 0.0274505615)     (same as 8b)
-        static constexpr typename SynapseKind<k_eSynapticMode_fixed16>::SynPermanence_t
+        static constexpr typename SynapseKind<k_eSynapticMode_packed3>::SynPermanence_t
             getDefaultConnectionThreshold()   { return 2u; }      // .3b* => 0.25                    (differs slightly from 8b)
-        static constexpr typename SynapseKind<k_eSynapticMode_fixed16>::SynPermSigned_t
+        static constexpr typename SynapseKind<k_eSynapticMode_packed3>::SynPermSigned_t
             getDefaultSpreadAtInit()          { return 65536; }   // .16b ratio (= 1.0)
-        static constexpr typename SynapseKind<k_eSynapticMode_fixed16>::SynPermSigned_t
+        static constexpr typename SynapseKind<k_eSynapticMode_packed3>::SynPermSigned_t
             getDefaultSpreadAtReset()         { return 65536; }   // .16b ratio (= 1.0)
     };
 

@@ -16,6 +16,15 @@
     <Filter Include="Header Files\tools">
       <UniqueIdentifier>{44f69f41-7caa-431c-bb7d-36640d967120}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\topoHTM">
+      <UniqueIdentifier>{995101bd-1c70-483e-bfa1-210932c0f8a7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\common">
+      <UniqueIdentifier>{62b3478d-2e7e-49e9-922c-a300fb1bf582}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\topoHTM">
+      <UniqueIdentifier>{f7bc03fb-3491-4001-bcaa-aa4b4d486195}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\examples\PerfTest.cpp">
@@ -23,6 +32,9 @@
     </ClCompile>
     <ClCompile Include="..\examples\WinConsole.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\topoHTM\TopoSP.cpp">
+      <Filter>Source Files\topoHTM</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -52,6 +64,27 @@
     </ClInclude>
     <ClInclude Include="..\vanillaHTM\VanillaSPImpl.h">
       <Filter>Header Files\vanillaHTM</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\AxonalExpansion.h">
+      <Filter>Header Files\common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\synapse.h">
+      <Filter>Header Files\common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\topoHTM\TopoHTMConfig.h">
+      <Filter>Header Files\topoHTM</Filter>
+    </ClInclude>
+    <ClInclude Include="..\topoHTM\TopoSP.h">
+      <Filter>Header Files\topoHTM</Filter>
+    </ClInclude>
+    <ClInclude Include="..\tools\bittools.h">
+      <Filter>Header Files\tools</Filter>
+    </ClInclude>
+    <ClInclude Include="..\tools\mempage.h">
+      <Filter>Header Files\tools</Filter>
+    </ClInclude>
+    <ClInclude Include="..\tools\parallel.h">
+      <Filter>Header Files\tools</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
