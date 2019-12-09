@@ -73,11 +73,24 @@ public:
         return _uX + _uY + _uZ;
     }
 
+    FORCE_INLINE static constexpr uint32 _fromZeroToExcl(uint32 uOverMax, uint32 uDraw) {
+        return uOverMax % uDraw;
+    }
+    FORCE_INLINE static constexpr double _asDouble01(uint32 uDraw) {
+        return double(uDraw) * (1.0 / 4294967296.0);
+    }
+    FORCE_INLINE static constexpr double _asDouble01inclusive(uint32 uDraw) {
+        return double(uDraw) / 4294967295.0;
+    }
+    FORCE_INLINE static constexpr double _asDoubleNeg1Pos1(uint32 uDraw) {
+        return 1.0 - (double(uDraw) / 2147483647.5);
+    }
+
     // Returns next number from this generator, hopefully uniform in [0 .. uOverMax-1]
     //   this version is fast, however not *precisely* uniform even if getNext() is, although not significantly so for
     //   relatively small 'uOverMax'
     FORCE_INLINE uint32 drawNextFromZeroToExcl(uint32 uOverMax) FORCE_INLINE_END {
-        return getNext() % uOverMax;
+        return Rand::_fromZeroToExcl(uOverMax, getNext());
     }
 
     // Returns next number from this generator, hopefully uniform in [0 .. uOverMax-1]
@@ -96,28 +109,28 @@ public:
 
     // Returns next number from this generator, hopefully uniform in [0.0 .. 1.0)
     FORCE_INLINE double getNextAsDouble01() FORCE_INLINE_END {
-        return double(getNext()) * (1.0 / 4294967296.0);
+        return Rand::_asDouble01(getNext());
     }
     // Returns next number from this generator, hopefully uniform in [0.0 .. 1.0]
     FORCE_INLINE double getNextAsDouble01inclusive() FORCE_INLINE_END {
-        return double(getNext()) / 4294967295.0;
+        return Rand::_asDouble01inclusive(getNext());
     }
     // Returns next number from this generator, hopefully uniform in [-1.0 .. 1.0]
     FORCE_INLINE double getNextAsDoubleNeg1Pos1() FORCE_INLINE_END {
-        return 1.0 - (double(getNext()) / 2147483647.5);
+        return Rand::_asDoubleNeg1Pos1(getNext());
     }
 
     // Returns next number from this generator as 32b floating point, hopefully uniform in [0.0 .. 1.0)
     FORCE_INLINE float getNextAsFloat01() FORCE_INLINE_END {
-        return float(getNextAsDouble01());
+        return float(Rand::_asDouble01(getNext()));
     }
     // Returns next number from this generator as 32b floating point, hopefully uniform in [0.0 .. 1.0]
     FORCE_INLINE float getNextAsFloat01inclusive() FORCE_INLINE_END {
-        return float(getNextAsDouble01inclusive());
+        return float(Rand::_asDouble01inclusive(getNext()));
     }
     // Returns next number from this generator as 32b floating point, hopefully uniform in [-1.0 .. 1.0]
     FORCE_INLINE float getNextAsFloatNeg1Pos1() FORCE_INLINE_END {
-        return float(getNextAsDoubleNeg1Pos1());
+        return float(Rand::_asDoubleNeg1Pos1(getNext()));
     }
 
 private:

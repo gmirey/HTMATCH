@@ -273,7 +273,7 @@ namespace HTMATCH {
             const AxonalArborMemManager* pArborDataMgr, uint32 uPackedBlockOffset, _Func func, uint64 uParam)
         {
             u8fast uFirstExpansionCount;
-            const uint8* pAxonalArborData = pArborDataMgr->getArborDataFor(uAxonArbourHandle, uFirstExpansionCount);
+            const uint8* pAxonalArborData = pArborDataMgr->getArborDataFor(uAxonArbourHandle, &uFirstExpansionCount);
             if (uFirstExpansionCount && pAxonalArborData) {
                 return SeqForwardExpand::_forwardExpandSignal(
                     pContext, uFirstExpansionCount, pAxonalArborData, uPackedBlockOffset, func, uParam);
@@ -321,7 +321,7 @@ namespace HTMATCH {
             const AxonalArborMemManager* pArborDataMgr, uint32 uPackedBlockOffset, _Func func, uint64 uParam)
         {
             u8fast uFirstExpansionCount;
-            const uint8* pAxonalArborData = pArborDataMgr->getArborDataFor(uAxonArbourHandle, uFirstExpansionCount);
+            const uint8* pAxonalArborData = pArborDataMgr->getArborDataFor(uAxonArbourHandle, &uFirstExpansionCount);
             if (uFirstExpansionCount && pAxonalArborData) {
                 if (uFirstExpansionCount < 4u) {
                     return SeqForwardExpand::_forwardExpandSignal(

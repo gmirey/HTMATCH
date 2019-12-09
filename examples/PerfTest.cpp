@@ -20,7 +20,7 @@
  * limitations under the License.
  */
 
-//#define COMPILE_PERFTEST        1
+#define COMPILE_PERFTEST        1
 
 #ifdef COMPILE_PERFTEST
 

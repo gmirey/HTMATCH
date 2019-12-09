@@ -20,6 +20,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\examples\PerfTest.cpp" />
+    <ClCompile Include="..\examples\TestExpansion.cpp" />
     <ClCompile Include="..\examples\WinConsole.cpp" />
   </ItemGroup>
   <ItemGroup>

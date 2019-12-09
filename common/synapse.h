@@ -148,7 +148,7 @@ namespace HTMATCH {
     //      IS_PACKED: whether the synapse permanence is meant to be packed with the address (true) or in another storage (false)
     //      IS_RATE16: whether the learning rates are expressed in .16b fixPoint (true) or in same type as perm (false)
     //   also the MaxVal() constexpr returning, as signed perm type, the value corresponding to floating-point '1.0' permanence
-    //   and the EpsVal() constexpr returning, for those types where IS_RATE16 is true, the .16b fixPoint value of a +1 epsilon.
+    //   and the EpsiVal() constexpr returning, for those types where IS_RATE16 is true, the .16b fixPoint value of a +1 epsilon.
     // See the explicit specializations below...
     template<eSynapticMode T_SYNAPTIC_MODE>
     struct SynapseKind {};
@@ -161,8 +161,8 @@ namespace HTMATCH {
         static const bool IS_FLOAT = true;
         static const bool IS_PACKED = false;
         static const bool IS_RATE16 = false;
-        static constexpr SynPermSigned_t MaxVal() { return 1.0; }
-        static constexpr uint16 EpsVal() { return 0; } // unused here, but required still defined
+        static constexpr SynPermSigned_t MaxVal() { return 1.0f; }
+        static constexpr i32fast EpsiVal() { return 1; } // unused here, but required still defined
     };
     template<> struct SynapseKind<k_eSynapticMode_fixed16> {
         typedef uint16 SynPermanence_t; typedef i32fast SynPermSigned_t;
@@ -170,7 +170,7 @@ namespace HTMATCH {
         static const bool IS_PACKED = false;
         static const bool IS_RATE16 = false;
         static constexpr SynPermSigned_t MaxVal() { return 65535; }
-        static constexpr uint16 EpsVal() { return 0;    } // unused here, but required still defined
+        static constexpr i32fast EpsiVal() { return 1; } // unused here, but required still defined
     };
     template<> struct SynapseKind<k_eSynapticMode_fixed8>  {
         typedef uint8 SynPermanence_t;  typedef i32fast SynPermSigned_t;
@@ -178,7 +178,7 @@ namespace HTMATCH {
         static const bool IS_PACKED = false;
         static const bool IS_RATE16 = false;
         static constexpr SynPermSigned_t MaxVal() { return 255; }
-        static constexpr uint16 EpsVal() { return 0; } // unused here, but required still defined
+        static constexpr i32fast EpsiVal() { return 1; } // unused here, but required still defined
     };
     template<> struct SynapseKind<k_eSynapticMode_fixed8stocha>  {
         typedef uint8 SynPermanence_t;  typedef i32fast SynPermSigned_t;
@@ -186,7 +186,7 @@ namespace HTMATCH {
         static const bool IS_PACKED = false;
         static const bool IS_RATE16 = true;
         static constexpr SynPermSigned_t MaxVal() { return 255; }
-        static constexpr uint16 EpsVal() { return 257; }
+        static constexpr i32fast EpsiVal() { return 257; }
     };
     template<> struct SynapseKind<k_eSynapticMode_packed5> {
         typedef u8fast SynPermanence_t; typedef i32fast SynPermSigned_t;
@@ -194,7 +194,7 @@ namespace HTMATCH {
         static const bool IS_PACKED = true;
         static const bool IS_RATE16 = true;
         static constexpr SynPermSigned_t MaxVal() { return 31; }
-        static constexpr uint16 EpsVal() { return 2048; }
+        static constexpr i32fast EpsiVal() { return 2048; }
     };
     template<> struct SynapseKind<k_eSynapticMode_packed4> {
         typedef u8fast SynPermanence_t; typedef i32fast SynPermSigned_t;
@@ -202,7 +202,7 @@ namespace HTMATCH {
         static const bool IS_PACKED = true;
         static const bool IS_RATE16 = true;
         static constexpr SynPermSigned_t MaxVal() { return 15; }
-        static constexpr uint16 EpsVal() { return 4096; }
+        static constexpr i32fast EpsiVal() { return 4096; }
     };
     template<> struct SynapseKind<k_eSynapticMode_packed3> {
         typedef u8fast SynPermanence_t; typedef i32fast SynPermSigned_t;
@@ -210,7 +210,7 @@ namespace HTMATCH {
         static const bool IS_PACKED = true;
         static const bool IS_RATE16 = true;
         static constexpr SynPermSigned_t MaxVal() { return 7; }
-        static constexpr uint16 EpsVal() { return 8192; }
+        static constexpr i32fast EpsiVal() { return 8192; }
     };
 
     // Static-Helper 'class' for default-values regarding persistence and learning rates,
@@ -353,8 +353,8 @@ namespace HTMATCH {
     };
 
     // Static-Helper 'class' for everything which does not require explicit template specialization any more at this point,
-    //   (at least if we accept a little bit of superfluous casts, and if we trust the compiler to optimize-away some
-    //    'if (SynapseKind<T_SYNAPTIC_MODE>::IS_PACKED)' or 'if (SynapseKind<T_SYNAPTIC_MODE>::IS_FLOAT)' conditionnals...)
+    //    at least if we accept a little bit of superfluous casts, and if we trust the compiler to optimize-away some
+    //    'if (SynapseKind<T_SYNAPTIC_MODE>::IS_FLOAT)' or other statically analyzable paths...
     // In particular, provides handy methods for initializing new synapses, and validity checks for configuration parameters.
     template<eSynapticMode T_SYNAPTIC_MODE>
     struct SynapticConfHelper {
@@ -365,18 +365,21 @@ namespace HTMATCH {
         static FORCE_INLINE SynPermanence_t drawNewPermanence(Rand& rng, SynPermSigned_t thresholdAsSigned,
             SynPermSigned_t rangeBelow, SynPermSigned_t rangeAbove) FORCE_INLINE_END
         {
+            // the following statically-solvable 'if... else...' chain should get optimized away
             if (bAllowUnconnected && bAllowConnected) {
                 // ... choose whether it should be an initially connected or unconnected synapse (a fixed 50% chance of each)
                 SynPermSigned_t binaryConnectedDraw = SynPermSigned_t(rng.getNext() & 1u); // 0 or 1
+                // same draw for both modes below:
+                uint32 uDrawValue = rng.getNext();
                 // impl unbranching choice by multiplying both result with either binaryConnectedDraw or its binary negation:
-                SynPermSigned_t whenConnected = _drawConnected(rng, thresholdAsSigned, rangeAbove);
-                SynPermSigned_t whenUnconnected = _drawUnconnected(rng, thresholdAsSigned, rangeBelow);
+                SynPermSigned_t whenConnected = _whenForConnected(uDrawValue, thresholdAsSigned, rangeAbove);
+                SynPermSigned_t whenUnconnected = _whenForUnconnected(uDrawValue, thresholdAsSigned, rangeBelow);
                 return SynPermanence_t(whenConnected * binaryConnectedDraw +
                                        whenUnconnected * (SynPermSigned_t(1) - binaryConnectedDraw));
             } else if (bAllowUnconnected) {
-                return SynPermanence_t(_drawUnconnected(rng, thresholdAsSigned, rangeBelow));
+                return SynPermanence_t(_whenForUnconnected(rng.getNext(), thresholdAsSigned, rangeBelow));
             } else if (bAllowConnected) {
-                return SynPermanence_t(_drawConnected(rng, thresholdAsSigned, rangeAbove));
+                return SynPermanence_t(_whenForConnected(rng.getNext(), thresholdAsSigned, rangeAbove));
             } else { // dumb case, really...
                 return SynPermanence_t(thresholdAsSigned); // not less dumb, but... oh, well...
             }
@@ -387,7 +390,7 @@ namespace HTMATCH {
         {
             SynPermSigned_t fullRangeAbove = SynapseKind<T_SYNAPTIC_MODE>::MaxVal() - thresholdAsSigned;
             SynPermSigned_t fullRangeBelow = thresholdAsSigned;
-            if (!SynapseKind<T_SYNAPTIC_MODE>::IS_FLOAT) {
+            if (!SynapseKind<T_SYNAPTIC_MODE>::IS_FLOAT) { // statically-solvable condition, should get optimized away
                 fullRangeAbove += SynPermSigned_t(1);   // will draw to range value excluded => 1 more to get to maxval
                 if (!SynapseKind<T_SYNAPTIC_MODE>::IS_PACKED) { // packed modes allow '0' for encoding non-null, but otherwise:
                     fullRangeBelow -= SynPermSigned_t(1);   // 1 less to avoid 0, since '_drawUnconnected' will add -1
@@ -405,7 +408,7 @@ namespace HTMATCH {
 
         static bool isValidDelta(SynPermSigned_t value) {
             // delta values shall be non-negative and less than 0.5 (on normalized [0.0 .. 1.0] range)
-            if (SynapseKind<T_SYNAPTIC_MODE>::IS_RATE16)
+            if (SynapseKind<T_SYNAPTIC_MODE>::IS_RATE16) // statically-solvable condition, should get optimized away
                 return value >= SynPermSigned_t(0) && value < SynPermSigned_t(32768);  // rate16 deltas are .16b fixpt
             else
                 return value >= SynPermSigned_t(0) && 
@@ -413,43 +416,43 @@ namespace HTMATCH {
         }
         static bool isValidThreshold(SynPermanence_t value) {
             // connection threshold shall be strictly above min and strictly below max
-            return (SynapseKind<T_SYNAPTIC_MODE>::IS_PACKED ?
+            return (SynapseKind<T_SYNAPTIC_MODE>::IS_PACKED ? // statically-solvable condition, should get optimized away
                         SynPermSigned_t(value) >= SynPermSigned_t(0) :  // packed modes also allow '0' for encoding non-null
                         SynPermSigned_t(value) > SynPermSigned_t(0)) &&
                    SynPermSigned_t(value) < SynapseKind<T_SYNAPTIC_MODE>::MaxVal();
         }
         static bool isValidSpread(SynPermSigned_t value) {
             // spread shall be [0.0 .. 1.0]
-            if (SynapseKind<T_SYNAPTIC_MODE>::IS_FLOAT)
+            if (SynapseKind<T_SYNAPTIC_MODE>::IS_FLOAT) // statically-solvable condition, should get optimized away
                 return value >= SynPermSigned_t(0.0f) && value <= SynPermSigned_t(1.0f);
             else
-                return value >= SynPermSigned_t(0) && value <= SynPermSigned_t(65536); // non-float spreads are .16b fixpt
+                return value >= SynPermSigned_t(0) && value <= SynPermSigned_t(65536); // all non-float spreads are .16b fixpt
         }
 
     private:
 
-        static FORCE_INLINE SynPermSigned_t _drawUnconnected(Rand& rng, SynPermSigned_t thresholdAsSigned,
+        static FORCE_INLINE SynPermSigned_t _whenForUnconnected(uint32 uRngDraw, SynPermSigned_t thresholdAsSigned,
             SynPermSigned_t rangeBelow) FORCE_INLINE_END
         {
-            if (SynapseKind<T_SYNAPTIC_MODE>::IS_FLOAT) {
-                return thresholdAsSigned - SynPermSigned_t(rng.getNextAsFloat01()) * rangeBelow;
+            if (SynapseKind<T_SYNAPTIC_MODE>::IS_FLOAT) { // statically-solvable condition, should get optimized away
+                return thresholdAsSigned - SynPermSigned_t(Rand::_asDouble01(uRngDraw)) * rangeBelow;
             } else {
-                return thresholdAsSigned - SynPermSigned_t(1) - SynPermSigned_t(rng.drawNextFromZeroToExcl(rangeBelow));
+                return thresholdAsSigned - SynPermSigned_t(1) - SynPermSigned_t(Rand::_fromZeroToExcl(rangeBelow, uRngDraw));
             }
         }
 
-        static FORCE_INLINE SynPermSigned_t _drawConnected(Rand& rng, SynPermSigned_t thresholdAsSigned,
+        static FORCE_INLINE SynPermSigned_t _whenForConnected(uint32 uRngDraw, SynPermSigned_t thresholdAsSigned,
             SynPermSigned_t rangeAbove) FORCE_INLINE_END
         {
-            if (SynapseKind<T_SYNAPTIC_MODE>::IS_FLOAT) {
-                return thresholdAsSigned + SynPermSigned_t(rng.getNextAsFloat01()) * rangeAbove;
+            if (SynapseKind<T_SYNAPTIC_MODE>::IS_FLOAT) { // statically-solvable condition, should get optimized away
+                return thresholdAsSigned + SynPermSigned_t(Rand::_asDouble01(uRngDraw)) * rangeAbove;
             } else {
-                return thresholdAsSigned + SynPermSigned_t(rng.drawNextFromZeroToExcl(rangeAbove));
+                return thresholdAsSigned + SynPermSigned_t(Rand::_fromZeroToExcl(rangeAbove, uRngDraw));
             }
         }
 
         static SynPermSigned_t _getRangeFromSpread(SynPermSigned_t spreadFactor, SynPermSigned_t maxRange) {
-            if (SynapseKind<T_SYNAPTIC_MODE>::IS_FLOAT) {
+            if (SynapseKind<T_SYNAPTIC_MODE>::IS_FLOAT) { // statically-solvable condition, should get optimized away
                 return spreadFactor * maxRange;
             } else { // 'spreadFactor' expressed .16b for non-floating point modes
                 // we switch to unsigned here to avoid cases where mul would set bit 31 then interpret it as a sign bit
